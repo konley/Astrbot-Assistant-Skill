@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>SSH 隧道管理器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei UI", -apple-system, sans-serif;
+    background: #f5f7fa;
+    color: #2c3e50;
+    padding: 32px 20px;
+  }
+  .container { max-width: 640px; margin: 0 auto; }
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 24px;
+    color: #1a1a2e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8e9aaf;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 12px; margin-bottom: 10px; }
+  .field { flex: 1; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: #8e9aaf;
+    margin-bottom: 4px;
+  }
+  input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #dde2e8;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #2c3e50;
+    background: #fafbfc;
+    transition: border 0.15s, background 0.15s;
+  }
+  input:focus {
+    outline: none;
+    border-color: #4a9eff;
+    background: #fff;
+  }
+
+  /* 隧道行 */
+  .tunnel-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding: 10px;
+    background: #fafbfc;
+    border: 1px solid #eef0f3;
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+  .tunnel-item .field { min-width: 0; }
+  .tunnel-item .col-name { flex: 2.5; }
+  .tunnel-item .col-port { flex: 1; }
+  .btn-del {
+    background: #fff;
+    color: #e74c3c;
+    border: 1px solid #f0c8c4;
+    border-radius: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .btn-del:hover { background: #fdf0ee; border-color: #e74c3c; }
+  .btn-add {
+    background: #fff;
+    color: #4a9eff;
+    border: 1px dashed #c5d3e8;
+    border-radius: 8px;
+    padding: 9px;
+    width: 100%;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 2px;
+    transition: all 0.15s;
+  }
+  .btn-add:hover { background: #f0f6ff; border-color: #4a9eff; }
+
+  /* 密码切换 */
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .checkbox-row input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: #4a9eff;
+    border: 1px solid #c5d3e8;
+  }
+  .checkbox-row label {
+    font-size: 13px;
+    color: #5a6c7d;
+    cursor: pointer;
+  }
+
+  /* 指令框 */
+  .cmd-section {
+    display: none;
+    margin-top: 4px;
+  }
+  .cmd-box {
+    background: #1e1e2e;
+    border-radius: 8px;
+    padding: 14px 16px;
+    position: relative;
+  }
+  .cmd-box code {
+    display: block;
+    font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 13px;
+    color: #a6e3a1;
+    line-height: 1.6;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+  .btn-copy {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #313244;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .btn-copy:hover { background: #45475a; }
+  .btn-copy.copied { background: #a6e3a1; color: #1e1e2e; border-color: #a6e3a1; }
+
+  /* 主按钮 */
+  .btn-primary {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    background: #4a9eff;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: #3a8eef; }
+
+  /* 快速访问链接 */
+  .links-section {
+    display: none;
+    margin-top: 4px;
+  }
+  .links-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .link-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #f0f6ff;
+    border: 1px solid #d0e1ff;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .link-card:hover {
+    background: #e0edff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(74,158,255,0.15);
+  }
+  .link-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #4a9eff;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .link-info { min-width: 0; }
+  .link-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #2c3e50;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .link-url {
+    font-size: 11px;
+    color: #8e9aaf;
+    font-family: Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔌 SSH 隧道管理器</h1>
+
+  <!-- SSH 连接信息 -->
+  <div class="card">
+    <div class="card-title">SSH 连接</div>
+    <div class="row">
+      <div class="field"><label>服务器 IP</label><input id="host" placeholder="如 192.168.1.100"></div>
+      <div class="field" style="max-width:90px"><label>SSH 端口</label><input id="sshPort" value="22"></div>
+      <div class="field" style="max-width:90px"><label>用户名</label><input id="user" value="root"></div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="usePassword">
+      <label for="usePassword">使用密码（需 plink）</label>
+    </div>
+    <div class="field" id="pwdField" style="display:none">
+      <label>密码</label>
+      <input id="password" type="password">
+    </div>
+  </div>
+
+  <!-- 隧道配置 -->
+  <div class="card">
+    <div class="card-title">隧道配置</div>
+    <div id="tunnels"></div>
+    <button class="btn-add" onclick="addTunnel()">+ 添加隧道</button>
+  </div>
+
+  <!-- 生成指令 -->
+  <div class="card">
+    <button class="btn-primary" onclick="generate()">生成指令并开启</button>
+    <div class="cmd-section" id="cmdSection">
+      <div style="height:14px"></div>
+      <div class="cmd-box">
+        <button class="btn-copy" id="copyBtn" onclick="copyCmd()">复制</button>
+        <code id="cmdText"></code>
+      </div>
+    </div>
+    <div class="links-section" id="linksSection">
+      <div style="height:14px"></div>
+      <div class="card-title">快速访问</div>
+      <div class="links-grid" id="linksGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "ssh_tunnel_config";
+
+// 默认配置
+const defaultConfig = {
+  host: "",
+  sshPort: "22",
+  user: "root",
+  usePassword: false,
+  password: "",
+  tunnels: [
+    { name: "AstrBot 面板", local: 6185, remote: 6185 },
+    { name: "NapCat 面板", local: 6099, remote: 6099 },
+  ]
+};
+
+let tunnels = [];
+
+// ---------- 持久化 ----------
+function loadConfig() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const c = JSON.parse(saved);
+      document.getElementById("host").value = c.host || defaultConfig.host;
+      document.getElementById("sshPort").value = c.sshPort || defaultConfig.sshPort;
+      document.getElementById("user").value = c.user || defaultConfig.user;
+      document.getElementById("usePassword").checked = c.usePassword || false;
+      document.getElementById("password").value = c.password || "";
+      document.getElementById("pwdField").style.display = c.usePassword ? "block" : "none";
+      tunnels = c.tunnels && c.tunnels.length > 0 ? c.tunnels : JSON.parse(JSON.stringify(defaultConfig.tunnels));
+      return;
+    }
+  } catch(e) {}
+  tunnels = JSON.parse(JSON.stringify(defaultConfig.tunnels));
+}
+
+function saveConfig() {
+  const config = {
+    host: document.getElementById("host").value,
+    sshPort: document.getElementById("sshPort").value,
+    user: document.getElementById("user").value,
+    usePassword: document.getElementById("usePassword").checked,
+    password: document.getElementById("password").value,
+    tunnels: tunnels
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+// ---------- 渲染隧道列表 ----------
+function renderTunnels() {
+  const c = document.getElementById("tunnels");
+  c.innerHTML = "";
+  tunnels.forEach((t, i) => {
+    const div = document.createElement("div");
+    div.className = "tunnel-item";
+    div.innerHTML = `
+      <div class="field col-name">
+        <label>名称</label>
+        <input value="${t.name}" onchange="updateTunnel(${i}, 'name', this.value)">
+      </div>
+      <div class="field col-port">
+        <label>本地端口</label>
+        <input type="number" value="${t.local}" onchange="updateTunnel(${i}, 'local', this.value)">
+      </div>
+      <div class="field col-port">
+        <label>远程端口</label>
+        <input type="number" value="${t.remote}" onchange="updateTunnel(${i}, 'remote', this.value)">
+      </div>
+      <button class="btn-del" onclick="delTunnel(${i})">删除</button>
+    `;
+    c.appendChild(div);
+  });
+}
+
+function updateTunnel(i, key, val) {
+  tunnels[i][key] = val;
+  saveConfig();
+}
+
+function addTunnel() {
+  tunnels.push({ name: "新隧道", local: 8080, remote: 8080 });
+  saveConfig();
+  renderTunnels();
+}
+
+function delTunnel(i) {
+  tunnels.splice(i, 1);
+  saveConfig();
+  renderTunnels();
+}
+
+// ---------- 密码切换 ----------
+document.getElementById("usePassword").addEventListener("change", function() {
+  document.getElementById("pwdField").style.display = this.checked ? "block" : "none";
+  saveConfig();
+});
+
+// 输入变化时自动保存
+["host", "sshPort", "user", "password"].forEach(id => {
+  document.getElementById(id).addEventListener("change", saveConfig);
+});
+
+// ---------- 生成指令 ----------
+function generate() {
+  const host = document.getElementById("host").value;
+  const sshPort = document.getElementById("sshPort").value;
+  const user = document.getElementById("user").value;
+  const usePwd = document.getElementById("usePassword").checked;
+  const password = document.getElementById("password").value;
+
+  const fwdArgs = tunnels.map(t => `-L ${t.local}:127.0.0.1:${t.remote}`).join(" ");
+
+  let cmd;
+  if (usePwd) {
+    cmd = `plink -N -batch ${fwdArgs} -P ${sshPort} -pw ${password} ${user}@${host}`;
+  } else {
+    cmd = `ssh -N ${fwdArgs} -p ${sshPort} ${user}@${host}`;
+  }
+
+  // 显示指令
+  document.getElementById("cmdText").textContent = cmd;
+  document.getElementById("cmdSection").style.display = "block";
+
+  // 显示快速访问链接
+  const grid = document.getElementById("linksGrid");
+  grid.innerHTML = "";
+  const icons = ["🌐", "📊", "🔧", "📋", "📡", "⚙️"];
+  tunnels.forEach((t, i) => {
+    const a = document.createElement("a");
+    a.className = "link-card";
+    a.href = `http://127.0.0.1:${t.local}`;
+    a.target = "_blank";
+    a.innerHTML = `
+      <div class="link-icon">${icons[i % icons.length]}</div>
+      <div class="link-info">
+        <div class="link-name">${t.name}</div>
+        <div class="link-url">127.0.0.1:${t.local}</div>
+      </div>
+    `;
+    grid.appendChild(a);
+  });
+  document.getElementById("linksSection").style.display = "block";
+
+  // 自动复制到剪贴板
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "✅ 已复制";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = "复制";
+      btn.classList.remove("copied");
+    }, 1500);
+  }).catch(() => {});
+
+  saveConfig();
+}
+
+function copyCmd() {
+  const text = document.getElementById("cmdText").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("copyBtn");
+    btn.textContent = "✅ 已复制";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = "复制";
+      btn.classList.remove("copied");
+    }, 1500);
+  });
+}
+
+// ---------- 初始化 ----------
+loadConfig();
+renderTunnels();
+</script>
+</body>
+</html>
