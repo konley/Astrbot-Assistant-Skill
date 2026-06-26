@@ -58,6 +58,22 @@ AstrBot version examples:
 - logo.png in plugin root
 - 1:1 ratio, recommended 256x256
 
+## Config Schema (`_conf_schema.json`)
+可选，用于在 WebUI 渲染配置面板。
+
+- 支持的类型：`int`、`float`、`bool`、`string`、`text`、`list`、`file`、`object`、`template_list`
+- `type: "string"` 配合 `options` 数组可在 WebUI 显示为下拉菜单（不支持 `choices` 或 `type: "select"`）
+- 示例：
+  ```json
+  "default_tone": {
+    "description": "默认辞气",
+    "type": "string",
+    "default": "自动",
+    "options": ["自动", "温言", "辩经"],
+    "hint": "选择默认辞气风格"
+  }
+  ```
+
 ## Debug and Reload
 - Start AstrBot runtime for plugin debugging.
 - After code changes, use WebUI plugin management and reload plugin.

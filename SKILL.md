@@ -157,4 +157,5 @@ cn_description: >-
 - OpenAPI 基址默认 `http://localhost:6185`，端点 `/api/v1/*`，鉴权头 `X-API-Key`
 - API Key 从配置或环境变量读取，不硬编码
 - 生成代码提交前用 ruff 格式化
+- `_conf_schema.json` 中 `type: "string"` 配合 `options` 数组（如 `"options": ["a", "b"]`）可在 WebUI 渲染为下拉菜单。不支持 `choices` 或 `type: "select"`。支持的类型：`int`、`float`、`bool`、`string`、`text`、`list`、`file`、`object`、`template_list`
 - 官方文档：[插件开发](https://docs.astrbot.app/dev/star/plugin-new.html) · [OpenAPI](https://docs.astrbot.app/scalar.html)
