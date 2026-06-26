@@ -20,7 +20,7 @@
 ```json
 {
   "dashboard": {
-    "port": 6185
+    "port": 62124
   },
   "platform": [
     {
@@ -84,7 +84,7 @@ journalctl -u astrbot -f     # 实时日志
 ```json
 {
   "host": "::",           // 监听地址，:: 表示所有
-  "port": 6099,          // WebUI 端口
+  "port": 62125,          // WebUI 端口
   "token": "",            // 访问令牌，空则不需要
   "loginRate": 10,        // 登录频率限制
   "autoLoginAccount": "", // 自动登录的 QQ 号
@@ -122,13 +122,42 @@ ws://127.0.0.1:{astrbot_ws_port}/ws
 
 ## SSH 远程操作（Windows 本地）
 
+### login.config 凭据文件
+
+项目根目录下可能存在 `login.config` 文件，存储 SSH 连接凭据。当用户请求远程操作时，**优先读取此文件**，不询问用户凭据。
+
+格式：
+```
+ssh:IP:端口
+name:用户名
+psw:密码
+```
+
+解析示例（Python）：
+```python
+def parse_login_config(path="login.config"):
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().strip().splitlines()
+    info = {}
+    for line in lines:
+        key, _, val = line.partition(":")
+        info[key.strip()] = val.strip()
+    ssh_parts = info.get("ssh", "").split(":")
+    return {
+        "host": ssh_parts[0] if len(ssh_parts) > 0 else "",
+        "port": int(ssh_parts[1]) if len(ssh_parts) > 1 else 22,
+        "username": info.get("name", "root"),
+        "password": info.get("psw", ""),
+    }
+```
+
 ### paramiko 脚本模板
 
 ```python
 import paramiko
 
-HOST = "你的服务器IP"
-PORT = 22
+HOST = "服务器IP"
+PORT = SSH端口
 USER = "用户名"
 PASS = "密码"
 

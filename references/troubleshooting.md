@@ -176,3 +176,45 @@ astrbot_version: ">=4.17.0"
 astrbot_version: ">=4.16,<5"
 astrbot_version: "~=4.17"
 ```
+
+## 14. sentence-transformers 嵌入模型加载失败
+
+**现象**：日志报 `嵌入模型加载失败，L2 记忆库将不可用：sentence-transformers 未安装`
+
+**原因**：服务器未安装 `sentence-transformers` 包，或安装时默认拉取了完整 GPU 版 torch 导致磁盘/时间浪费。
+
+**解决**：
+
+uv 部署方式下，AstrBot 的 Python 路径为 `/root/.local/share/uv/tools/astrbot/bin/python`。
+
+### 无 GPU 服务器（推荐 CPU-only）
+
+先装 CPU 版 torch（避免下载 2GB+ CUDA 包），再装 sentence-transformers：
+
+```bash
+PY=/root/.local/share/uv/tools/astrbot/bin/python
+$PY -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+$PY -m pip install sentence-transformers --no-deps
+$PY -m pip install transformers huggingface-hub scikit-learn scipy nltk tokenizers
+```
+
+### 有 GPU 服务器
+
+直接装即可：
+
+```bash
+PY=/root/.local/share/uv/tools/astrbot/bin/python
+$PY -m pip install sentence-transformers
+```
+
+### 验证
+
+```bash
+$PY -c "import sentence_transformers; print(sentence_transformers.__version__)"
+```
+
+### 重启
+
+```bash
+systemctl restart astrbot
+```

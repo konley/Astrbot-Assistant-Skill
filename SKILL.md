@@ -128,12 +128,25 @@ cn_description: >-
 
 ### 部署运维
 
+- **login.config 凭据读取 SOP**：当用户提到 SSH 远程操作时，先检查项目根目录下是否存在 `login.config` 文件。若存在且可解析（格式见下），直接读取 IP/端口/用户名/密码，**不要询问用户凭据**，只需确认"要帮你远程操作吗？"即可。若文件不存在或解析失败，再向用户索取。`login.config` 格式：
+  ```
+  ssh:IP:端口
+  name:用户名
+  psw:密码
+  ```
 - Windows 本地通过 paramiko 库实现 SSH 远程操作（系统 ssh.exe 需要交互式密码输入）
 - PowerShell 中传递含特殊字符的命令时，优先用 SFTP 上传文件而非 heredoc
 - `astrbot init` 是交互式的，需用 `invoke_shell` + 自动应答
 - NapCat WebUI 端口配置在 `config/webui.json`，字段为 `port`
 - aiocqhttp 反向 WS 连接地址必须包含 `/ws` 路径
 - uv 部署方式不支持 WebUI 升级，需用 `uv tool upgrade astrbot`
+- **无 GPU 服务器安装 torch/sentence-transformers**：必须使用 CPU-only 索引安装 torch，否则会下载 2GB+ 无用的 CUDA/nvidia 包（cudnn 444MB、cublas 542MB 等）。正确命令：
+  ```bash
+  {astrbot_python} -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+  {astrbot_python} -m pip install sentence-transformers --no-deps
+  {astrbot_python} -m pip install transformers huggingface-hub scikit-learn scipy nltk tokenizers
+  ```
+  其中 `{astrbot_python}` 为 uv 部署的 Python 路径，通常为 `/root/.local/share/uv/tools/astrbot/bin/python`。
 
 ### 插件开发
 

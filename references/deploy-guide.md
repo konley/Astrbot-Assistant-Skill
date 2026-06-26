@@ -116,7 +116,7 @@ bash /tmp/napcat.sh --cli y --force
 ```json
 {
   "host": "::",
-  "port": 6099,
+  "port": 62125,
   "token": "",
   "loginRate": 10,
   "autoLoginAccount": "",

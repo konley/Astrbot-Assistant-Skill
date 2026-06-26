@@ -233,8 +233,8 @@
   <div class="card">
     <div class="card-title">SSH 连接</div>
     <div class="row">
-      <div class="field"><label>服务器 IP</label><input id="host" placeholder="如 192.168.1.100"></div>
-      <div class="field" style="max-width:90px"><label>SSH 端口</label><input id="sshPort" value="22"></div>
+      <div class="field"><label>服务器 IP</label><input id="host" value="152.67.140.25"></div>
+      <div class="field" style="max-width:90px"><label>SSH 端口</label><input id="sshPort" value="62122"></div>
       <div class="field" style="max-width:90px"><label>用户名</label><input id="user" value="root"></div>
     </div>
     <div class="checkbox-row">
@@ -277,14 +277,15 @@ const STORAGE_KEY = "ssh_tunnel_config";
 
 // 默认配置
 const defaultConfig = {
-  host: "",
-  sshPort: "22",
+  host: "152.67.140.25",
+  sshPort: "62122",
   user: "root",
   usePassword: false,
   password: "",
   tunnels: [
-    { name: "AstrBot 面板", local: 6185, remote: 6185 },
-    { name: "NapCat 面板", local: 6099, remote: 6099 },
+    { name: "AstrBot 面板", local: 62124, remote: 62124 },
+    { name: "NapCat 面板", local: 62125, remote: 62125 },
+    { name: "API 聚合器", local: 4141, remote: 4141 },
   ]
 };
 
