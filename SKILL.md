@@ -66,6 +66,7 @@ cn_description: >-
 | `assets/test_plugin_behavior.py.template` | 插件行为测试模板 |
 | `assets/test_openapi_auth_and_shape.py.template` | OpenAPI 鉴权与响应结构测试模板 |
 | `assets/dev-commands.txt` | 本地开发常用命令 |
+| `assets/logo-process.py` | 插件 Logo 自动处理脚本（任意图→256x256 居中正方形 PNG） |
 
 ## 工作流程
 
@@ -97,15 +98,22 @@ cn_description: >-
 
 ### 开发 AstrBot 插件
 
-1. **收集需求**：插件仓库名（建议前缀 `astrbot_plugin_`）、功能描述、目标适配器、AstrBot 版本约束、第三方依赖、是否需要 OpenAPI
-2. **需求解析**：将自然语言转为具体实现计划——功能列表、触发方式、输入输出行为、错误路径
-3. **按序生成**：
-   - `metadata.yaml`（必填：name/desc/version/author；可选：display_name/support_platforms/astrbot_version）
+1. **收集需求**：
+   - 若 `login.config` 包含 GitHub 链接，将其作为仓库根地址。向用户确认："检测到你的 GitHub 仓库 `{链接}`，是否以此为基础创建插件？"
+   - 功能描述、目标适配器、AstrBot 版本约束、第三方依赖、是否需要 OpenAPI。
+2. **需求解析**：将自然语言转为具体实现计划——功能列表、触发方式、输入输出行为、错误路径。
+3. **插件命名**：根据需求给出 2-3 个建议名（格式 `astrbot_plugin_xxx`，小写、无空格），与用户确认后确定。
+4. **按序生成**：
+   - `metadata.yaml`（必填：name/desc/version/author/repo；可选：display_name/support_platforms/astrbot_version）
+     - `repo` 字段 = GitHub 根地址 + `/` + 插件文件夹名（如 `https://github.com/konley/astrbot_plugin_xxx`）
+     - 若无 GitHub 根地址，`repo` 字段可选，不强制
    - `requirements.txt`（有第三方依赖时）
    - 插件代码（异步 HTTP 优先用 aiohttp/httpx，持久化数据存 data 目录）
    - 测试文件（至少一个 smoke test）
-4. **合规检查**：metadata 字段合法、适配器键有效、无 requests 同步调用、数据不写插件源目录
-5. **调试工作流**：运行 AstrBot → WebUI 插件管理热重载 → ruff 格式化
+5. **合规检查**：metadata 字段合法、适配器键有效、无 requests 同步调用、数据不写插件源目录。
+6. **Logo 处理**（可选）：若用户有 logo 图片，调用 `assets/logo-process.py` 自动转为 256x256 PNG。
+7. **首次 Git 提交**：提交前检查 `logo.png` 是否存在，若不存在则提醒用户："可添加 logo 图片，运行 `python assets/logo-process.py <图片路径>` 自动生成"，非强制。
+8. **调试工作流**：运行 AstrBot → WebUI 插件管理热重载 → ruff 格式化。
 
 ### 修复插件常见问题
 
@@ -118,6 +126,16 @@ cn_description: >-
 直接提供 `assets/tunnel-generator.html` 给用户，或根据其服务器信息定制。
 用户在浏览器中配置隧道 → 生成 ssh 命令 → 粘贴到终端执行。
 
+### 处理插件 Logo
+
+1. 用户提供任意格式的原始图片（jpg/png/webp/gif/bmp 等）
+2. 调用 `assets/logo-process.py <图片路径>` 自动处理：
+   - 转为 PNG 格式
+   - 居中裁剪为正方形
+   - 缩放至 256×256
+   - 输出到插件根目录 `logo.png`
+3. 若不指定输出路径，默认输出到当前目录的 `logo.png`
+
 ## 支持的适配器键
 
 用于 `metadata.yaml` 的 `support_platforms` 字段：
@@ -128,11 +146,15 @@ cn_description: >-
 
 ### 部署运维
 
-- **login.config 凭据读取 SOP**：当用户提到 SSH 远程操作时，先检查项目根目录下是否存在 `login.config` 文件。若存在且可解析（格式见下），直接读取 IP/端口/用户名/密码，**不要询问用户凭据**，只需确认"要帮你远程操作吗？"即可。若文件不存在或解析失败，再向用户索取。`login.config` 格式：
+- **login.config 凭据读取 SOP**：当用户提到 SSH 远程操作时，先检查项目根目录下是否存在 `login.config` 文件。若存在且可解析，直接读取 IP/端口/用户名/密码，**不要询问用户凭据**，只需确认"要帮你远程操作吗？"即可。若文件不存在或解析失败，再向用户索取。
+  - 文件解析逻辑：第一行为 `IP:端口`（或 `ssh:IP:端口`），第二行为用户名，第三行为密码。
+  - 可选行：若某行匹配 GitHub 链接（`https://github.com/...`），自动识别为用户的仓库根地址。后续制作插件时，`metadata.yaml` 的 `repo` 字段将基于此地址拼接插件文件夹名生成。
+  - `login.config` 示例：
   ```
-  ssh:IP:端口
-  name:用户名
-  psw:密码
+  152.67.140.25:62122
+  root
+  konley44448888
+  https://github.com/konley
   ```
 - Windows 本地通过 paramiko 库实现 SSH 远程操作（系统 ssh.exe 需要交互式密码输入）
 - PowerShell 中传递含特殊字符的命令时，优先用 SFTP 上传文件而非 heredoc
@@ -150,7 +172,8 @@ cn_description: >-
 
 ### 插件开发
 
-- 插件目录命名：小写、无空格、建议前缀 `astrbot_plugin_`
+- 插件目录命名：小写、无空格、建议前缀 `astrbot_plugin_`（如 `astrbot_plugin_weather`）
+- `metadata.yaml` 的 `repo` 字段记录插件仓库地址。若 `login.config` 中有 GitHub 链接，`repo` = `{github链接}/{插件文件夹名}`
 - `astrbot_version` 遵循 PEP 440，不加 `v` 前缀（如 `>=4.17.0`）
 - 持久化数据必须存放在 AstrBot `data` 目录，不写插件源目录
 - 网络请求避免 `requests`，优先异步 `aiohttp` 或 `httpx`
@@ -158,4 +181,6 @@ cn_description: >-
 - API Key 从配置或环境变量读取，不硬编码
 - 生成代码提交前用 ruff 格式化
 - `_conf_schema.json` 中 `type: "string"` 配合 `options` 数组（如 `"options": ["a", "b"]`）可在 WebUI 渲染为下拉菜单。不支持 `choices` 或 `type: "select"`。支持的类型：`int`、`float`、`bool`、`string`、`text`、`list`、`file`、`object`、`template_list`
+- Logo 处理：用户提供原始图，调用 `assets/logo-process.py` 自动转为 256×256 居中方 PNG
+- 首次 Git 提交时提醒用户可添加 logo（非强制）
 - 官方文档：[插件开发](https://docs.astrbot.app/dev/star/plugin-new.html) · [OpenAPI](https://docs.astrbot.app/scalar.html)

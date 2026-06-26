@@ -3,7 +3,8 @@
 ## Metadata Compliance
 - `metadata.yaml` exists.
 - Required keys: `name`, `desc`, `version`, `author`.
-- Optional keys are valid and documented (`display_name`, `support_platforms`, `astrbot_version`).
+- Recommended key: `repo` (repository URL; if login.config has GitHub link, must be `{github_url}/{plugin_folder_name}`).
+- Optional keys are valid and documented (`display_name`, `support_platforms`, `astrbot_version`, `repo`).
 - `astrbot_version` follows PEP 440 and has no `v` prefix.
 
 ## Adapter Compliance

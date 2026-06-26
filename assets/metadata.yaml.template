@@ -6,6 +6,9 @@ author: your_name
 # Optional human-friendly name in plugin markets/UI
 display_name: Example Plugin
 
+# Optional repository URL (auto-filled from login.config GitHub link + plugin folder name)
+repo: https://github.com/your_name/astrbot_plugin_example
+
 # Optional supported adapters
 support_platforms:
   - telegram

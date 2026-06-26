@@ -20,14 +20,17 @@ Turn parsed requirements into concrete artifacts:
 - Data persistence location (`data` directory)
 
 ## 3) Build Order
-1. metadata.yaml
+1. metadata.yaml (include `repo` field = `{github_root}/{plugin_folder_name}` if GitHub link is available)
 2. requirements.txt
 3. plugin code
 4. tests
-5. final checklist
+5. logo processing (optional: run `assets/logo-process.py`)
+6. final checklist (remind user about logo on first git commit)
 
 ## 4) Completion Contract
 Before finish, verify:
 - behavior matches requirement summary
 - assumptions are listed
+- `repo` field in metadata.yaml is correctly populated (if GitHub link available)
 - user can run/debug/reload with clear steps
+- remind user about optional logo on first git commit

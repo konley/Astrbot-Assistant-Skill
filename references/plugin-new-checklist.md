@@ -27,6 +27,7 @@ Required minimum:
 - desc
 - version
 - author
+- repo (repository URL; if login.config contains GitHub link, auto-fill as {github_url}/{plugin_name})
 
 Optional common fields:
 - display_name
@@ -57,6 +58,7 @@ AstrBot version examples:
 ## Optional Assets
 - logo.png in plugin root
 - 1:1 ratio, recommended 256x256
+- Use `assets/logo-process.py` to auto-convert any image to 256x256 centered-square PNG
 
 ## Config Schema (`_conf_schema.json`)
 可选，用于在 WebUI 渲染配置面板。
