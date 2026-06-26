@@ -35,6 +35,28 @@ help: "[占卜] 随机选取..."
 - 或用 Python paramiko SFTP 写入时确保 `json.dumps` 不加 BOM
 - 验证：`xxd webui.json | head -1`，首字节应为 `7b`（`{`）而非 `ef`
 
+## 3.1 插件文件 BOM / Python 字符串语法导致加载失败
+
+**现象一**：WebUI 安装插件报 `json.decoder.JSONDecodeError: Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)`，多见于 `_conf_schema.json`。
+
+**现象二**：插件 `main.py` 报 `SyntaxError: invalid syntax. Perhaps you forgot a comma?`，多见于提示词字符串里夹带未转义的 ASCII 双引号（如 `"省流"`）。
+
+**原因**：
+- 在 Windows 上用编辑器/脚本写文件时引入了 UTF-8 BOM 头（`EF BB BF`），AstrBot 的 `json.loads` 零容忍。
+- Python 字符串用 `"..."` 包裹，内部又出现 `"`，导致字符串提前结束。
+
+**解决**：
+1. **去 BOM**（PowerShell）：
+   ```powershell
+   $p="_conf_schema.json"
+   $c=[IO.File]::ReadAllText($p).TrimStart([char]0xFEFF)
+   [IO.File]::WriteAllText($p, $c, (New-Object System.Text.UTF8Encoding($false)))
+   ```
+2. **修字符串**：含 ASCII 双引号的行改用单引号包裹，例如
+   `'请进行"省流"总结'` 而非 `"请进行"省流"总结"`。
+3. **交付前批量自检**（见 `references/compliance-checklist.md` 的 Encoding & Syntax Pre-flight）：
+   逐个对 `.json`/`.py`/`.yaml` 验证 BOM + `json.load` + `py_compile`，不要只编译改动过的单文件。
+
 ## 4. astrbot init 交互式提示卡住
 
 **现象**：通过 SSH 非交互执行 `astrbot init` 时命令挂起无响应。
