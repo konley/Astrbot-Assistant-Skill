@@ -238,6 +238,7 @@ cn_description: >-
 - Logo 处理：用户提供原始图，调用 `assets/logo-process.py` 自动转为 256×256 居中方 PNG
 - 首次 Git 提交时提醒用户可添加 logo（非强制）
 - 官方文档：[插件开发](https://docs.astrbot.app/dev/star/plugin-new.html) · [OpenAPI](https://docs.astrbot.app/scalar.html)
+- **Skill 文件修改后推送**：当需要 git push 时，先检查 `.opencode/skills/{skill-name}/SKILL.md` 是否为符号链接。如果是，用 `cmd /c dir` 查看链接目标（JUNCTION 或 SYMLINK），然后到真实路径下执行 `git add/commit/push`，不要在符号链接位置操作。
 
 ### 机器人不回复排查 SOP
 
