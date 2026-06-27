@@ -162,6 +162,7 @@ cn_description: >-
 - NapCat WebUI 端口配置在 `config/webui.json`，字段为 `port`
 - aiocqhttp 反向 WS 连接地址必须包含 `/ws` 路径
 - uv 部署方式不支持 WebUI 升级，需用 `uv tool upgrade astrbot`
+- **MiniMax Token Plan 推理泄漏问题**：使用 MiniMax M3 等推理模型时，若 `reasoning: true` 但 `anth_thinking_config` 为 `{"type":"","budget":0}`，模型推理内容会混入回复正文泄漏。原因是 `minimax_token_plan` 适配器继承 `ProviderAnthropic`（非 OpenAI 源），Anthropic 源缺少 `<think>` 标签剥离逻辑，而 `anth_thinking_config` 未启用时 API 不返回标准 thinking 块，推理直接进 `completion_text`。`display_reasoning_text: false` 对此无效。修复：将 `anth_thinking_config` 改为 `{"type": "enabled", "budget": 2048}`（WebUI 无配置项，需直接编辑 `cmd_config.json`，然后重启 AstrBot）。
 - **无 GPU 服务器安装 torch/sentence-transformers**：必须使用 CPU-only 索引安装 torch，否则会下载 2GB+ 无用的 CUDA/nvidia 包（cudnn 444MB、cublas 542MB 等）。正确命令：
   ```bash
   {astrbot_python} -m pip install torch --index-url https://download.pytorch.org/whl/cpu
