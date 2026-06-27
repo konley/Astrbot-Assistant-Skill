@@ -238,3 +238,37 @@ cn_description: >-
 - Logo 处理：用户提供原始图，调用 `assets/logo-process.py` 自动转为 256×256 居中方 PNG
 - 首次 Git 提交时提醒用户可添加 logo（非强制）
 - 官方文档：[插件开发](https://docs.astrbot.app/dev/star/plugin-new.html) · [OpenAPI](https://docs.astrbot.app/scalar.html)
+
+### 机器人不回复排查 SOP
+
+当用户反馈"@机器人不回话"时，按以下步骤排查：
+
+1. **查日志定位阶段**：`journalctl -u astrbot --since 'YYYY-MM-DD HH:MM:SS'`，关注以下关键日志：
+   - `DIRECTED AT YOU` — @检测通过、`is_wake` 唤醒成功
+   - `ready to request llm provider` — LLM 请求准备就绪
+   - `acquired session lock for llm request` — 获取会话锁成功
+   - `completion` — API 返回结果
+   - `Prepare to send` — 最终发出回复
+
+2. **会话锁死锁（最常见原因）**：
+   - 如果看到 `ready to request` 但没有 `acquired session lock`，说明锁被占用
+   - 锁机制在 `astrbot/core/utils/session_lock.py`，基于 `asyncio.Lock` 按 `unified_msg_origin`（每群）隔离
+   - 同一群同一时间只能有一个 LLM 请求持有锁，前一个请求卡死则后续全部阻塞
+   - **修复**：重启 AstrBot（`systemctl restart astrbot`）
+
+3. **插件并行 LLM 请求抢占锁**：
+   - 某些插件（如 `astrbot_plugin_smart_imagechat_hub` 的 `proactive_emoji`）会并行发起 LLM 请求
+   - 配置项 `proactive_emoji_probability`（默认 0.6）控制自动表情包概率
+   - `retrieval_mode: "user_message_parallel"` 是并行模式，会和主 LLM 请求抢锁
+   - 如果并行请求卡住，主请求永远拿不到锁
+   - **修复**：`proactive_emoji_probability` 降至 0.2~0.4，或 `retrieval_mode` 改为 `on_decorating_result`（串行）
+
+4. **分群差异排查**：
+   - 如果 A 群回复正常、B 群不回复，对比两群日志
+   - B 群是否触发了特殊插件（`#生成图片`、长耗时 tool call 等）
+   - 检查 B 群是否有未完成的 agent runner 卡住了锁
+
+5. **`wake_prefix` 配置误区**：
+   - `@at` 唤醒独立于 `wake_prefix`，走 `isinstance(message, At)` 判定（`waking_check/stage.py:121-139`）
+   - `wake_prefix` 只影响不带 @ 的前缀唤醒（如 `/command`）
+   - `empty_mention_waiting` 只控制"纯 @ 无文字"的 60 秒等待机制，不影响带文字的 @at
