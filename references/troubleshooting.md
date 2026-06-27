@@ -240,3 +240,31 @@ $PY -c "import sentence_transformers; print(sentence_transformers.__version__)"
 ```bash
 systemctl restart astrbot
 ```
+
+## 15. sed 直接修改 JSON 配置文件导致启动崩溃
+
+**现象**：修改 `cmd_config.json` 后 AstrBot 启动失败，`systemctl` 显示 `auto-restart` 循环，日志报 `JSONDecodeError: Expecting property name enclosed in double quotes`。
+
+**原因**：用 `sed` 做正则文本替换来修改 JSON 文件。JSON 是结构化格式，`sed` 的字符串匹配可能命中文件中其他位置的相似文本，破坏引号、逗号等结构。
+
+**解决**：**绝不用 sed/正则直接改 JSON。** 正确做法：用 Python 解析 JSON → 修改字段 → 序列化回写。
+
+```python
+import json, paramiko
+
+# 读取本地原始配置
+with open("cmd_config.json", "r", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+# 安全修改
+cfg["platform_settings"]["ignore_bot_self_message"] = True
+
+# 上传到服务器
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+c.connect(host, port=port, username=user, password=psw)
+sftp = c.open_sftp()
+with sftp.open("/opt/astrbot/data/cmd_config.json", "w") as f:
+    f.write(json.dumps(cfg, indent=2, ensure_ascii=False))
+sftp.close()
+```
