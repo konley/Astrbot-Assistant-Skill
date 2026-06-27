@@ -44,6 +44,7 @@ cn_description: >-
 | `references/deploy-guide.md` | AstrBot + NapCat 完整部署流程，含命令、路径、配置参数 |
 | `references/troubleshooting.md` | 常见问题排障：BOM、端口冲突、WebSocket 405、插件 YAML 解析失败、插件开发问题 |
 | `references/config-reference.md` | 关键配置文件路径、结构、字段说明，含 paramiko 脚本模板 |
+| `references/plugin-lifecycle.md` | 插件生命周期管理：重载/重新安装/重启的优先级 SOP，WebUI API 端点 |
 
 ### 插件开发
 
@@ -113,7 +114,58 @@ cn_description: >-
 5. **合规检查**：metadata 字段合法、适配器键有效、无 requests 同步调用、数据不写插件源目录。
 6. **Logo 处理**（可选）：若用户有 logo 图片，调用 `assets/logo-process.py` 自动转为 256x256 PNG。
 7. **首次 Git 提交**：提交前检查 `logo.png` 是否存在，若不存在则提醒用户："可添加 logo 图片，运行 `python assets/logo-process.py <图片路径>` 自动生成"，非强制。
-8. **调试工作流**：运行 AstrBot → WebUI 插件管理热重载 → ruff 格式化。
+8. **调试工作流**：本地 ruff 格式化 → (可选 git push) → 同步文件到服务器插件目录 → WebUI 重载插件。**不得重启机器人。**
+
+### 插件生命周期管理（重载 vs 重新安装 vs 重启）
+
+**核心原则：重载 >> 重新安装 >>> 重启。重启机器人必须征得用户确认。**
+
+#### 重载插件（优先级最高）
+
+重载会完整地**终止→解绑→重新加载**插件，所有文件修改都会被重新读取执行，**无需重启机器人**。
+
+通过 WebUI 调用：`POST /api/plugin/reload`，body `{"name": "插件名"}`（省略则重载全部）。
+
+适用场景：
+- 修改了已安装插件的源码文件
+- 修改了插件配置文件
+- 更新了插件 metadata.yaml
+- 在线热修改任何插件文件后
+
+操作步骤：
+1. SSH/SFTP 将修改后的文件同步到服务器插件目录（`{data_dir}/addons/plugins/{plugin_name}/`）
+2. 通过 Dashboard API 触发重载
+3. 验证功能正常
+4. **无需重启**
+
+#### 重新安装插件（次优先）
+
+通过 WebUI 调用：先 `POST /api/plugin/uninstall` `{"plugin_name": "..."}`，再 `POST /api/plugin/install` `{"repo_url": "..."}`。
+
+适用场景：
+- 本地完成了完整开发周期，需要从 GitHub 重新拉取最新版本
+- 插件依赖发生变化（新增/删除 requirements.txt）
+- 插件目录结构变化（新增 pages/、skills/ 等）
+
+本地开发部署最佳实践：
+1. 本地修改完成 → `git add` → `git commit` → `git push`
+2. push 成功后 → WebUI 重新安装插件（或先卸后装）
+3. **无需重启**
+
+#### 同步本地修改的快速路径
+
+若尚未 push 到 GitHub 但需要在服务器上验证：
+1. SFTP 将本地修改的文件同步到服务器插件目录
+2. 触发重载即可
+3. 验证通过后 push 到 GitHub
+
+#### 何时需要重启机器人（必须征得用户确认）
+
+仅以下情况**可能**需要重启（需先告知用户原因并获确认）：
+- AstrBot 核心版本升级（`uv tool upgrade astrbot`）
+- 修改 `cmd_config.json` 中影响核心生命周期的配置（平台适配器、LLM Provider 等）
+- AstrBot Dashboard 配置变更（端口、API Key 等）
+- 系统级故障（进程僵死、内存泄漏等）
 
 ### 修复插件常见问题
 
@@ -146,6 +198,7 @@ cn_description: >-
 
 ### 部署运维
 
+- **禁止随意重启机器人**：能重载解决就用重载，能重新安装解决就用重新安装。**重启机器人必须征得用户确认**，严禁擅自重启。详细 SOP 见 `references/plugin-lifecycle.md`。
 - **login.config 凭据读取 SOP**：当用户提到 SSH 远程操作时，先检查项目根目录下是否存在 `login.config` 文件。若存在且可解析，直接读取 IP/端口/用户名/密码，**不要询问用户凭据**，只需确认"要帮你远程操作吗？"即可。若文件不存在或解析失败，再向用户索取。
   - 文件解析逻辑：第一行为 `IP:端口`（或 `ssh:IP:端口`），第二行为用户名，第三行为密码。
   - 可选行：若某行匹配 GitHub 链接（`https://github.com/...`），自动识别为用户的仓库根地址。后续制作插件时，`metadata.yaml` 的 `repo` 字段将基于此地址拼接插件文件夹名生成。
