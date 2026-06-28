@@ -103,6 +103,7 @@ cn_description: >-
 - `_conf_schema.json` 支持 type：int/float/bool/string/text/list/file/object/template_list；下拉菜单用 `type:"string"+options`，不支持 `choices`/`type:"select"`。详见 `source-config-schema.md` §2。
 - 插件持久化数据写 `data/plugin_data/{name}/`，不写源目录；网络请求用异步 aiohttp/httpx，不用 requests。
 - 生成代码提交前用 ruff 格式化。
+- **本地插件修改禁止走 SSH**：插件项目在本地工作区的，用 `read`/`edit` 直接读写本地文件，不要绕远程 shell 或 ssh-exec.py。只有查远程日志、改远端配置时才用 SSH 工具。
 
 ## 支持的适配器键（metadata.yaml support_platforms）
 
