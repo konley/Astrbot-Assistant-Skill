@@ -4,16 +4,22 @@
 
 ### 安装路径
 
-| 项目 | 路径 |
+> 本表为路径基线的**全局权威**，其它 reference 与此冲突以此为准。
+
+| 项目 | 路径（uv 部署，生产） |
 |------|------|
-| 工作目录 | `/opt/astrbot/`（或自定义） |
+| 工作目录 | `/opt/astrbot/` |
 | 数据目录 | `/opt/astrbot/data/` |
 | 主配置文件 | `/opt/astrbot/data/cmd_config.json` |
-| 插件目录 | `/opt/astrbot/data/plugins/` |
-| 插件数据 | `/opt/astrbot/data/plugin_data/` |
+| 插件安装目录 | `/opt/astrbot/data/addons/plugins/{plugin_name}/` |
+| 插件配置目录 | `/opt/astrbot/data/plugin_configs/` |
+| 插件数据 | `/opt/astrbot/data/plugin_data/{plugin_name}/` |
 | uv 安装位置 | `/root/.local/share/uv/tools/astrbot/` |
+| uv Python 解释器 | `/root/.local/share/uv/tools/astrbot/bin/python` |
 | astrbot 命令 | `/root/.local/bin/astrbot` |
 | systemd 服务 | `/etc/systemd/system/astrbot.service` |
+
+> ⚠️ 历史版本曾用 `data/plugins/`，当前版本统一为 `data/addons/plugins/`。本地开发场景（clone AstrBot repo）的相对路径基线为 `<repo>/AstrBot/data/addons/plugins/`。
 
 ### cmd_config.json 关键字段
 
@@ -126,65 +132,60 @@ ws://127.0.0.1:{astrbot_ws_port}/ws
 
 项目根目录下可能存在 `login.config` 文件，存储 SSH 连接凭据。当用户请求远程操作时，**优先读取此文件**，不询问用户凭据。
 
-格式：
+**统一格式（推荐）**：
 ```
-ssh:IP:端口
-name:用户名
-psw:密码
-```
-
-解析示例（Python）：
-```python
-def parse_login_config(path="login.config"):
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().strip().splitlines()
-    info = {}
-    for line in lines:
-        key, _, val = line.partition(":")
-        info[key.strip()] = val.strip()
-    ssh_parts = info.get("ssh", "").split(":")
-    return {
-        "host": ssh_parts[0] if len(ssh_parts) > 0 else "",
-        "port": int(ssh_parts[1]) if len(ssh_parts) > 1 else 22,
-        "username": info.get("name", "root"),
-        "password": info.get("psw", ""),
-    }
+IP:端口
+用户名
+密码
+https://github.com/用户名
 ```
 
-### paramiko 脚本模板
+第 4 行（可选）为 GitHub 仓库根地址，用于自动填充插件 `metadata.yaml` 的 `repo` 字段。
+
+解析逻辑兼容历史前缀格式（`ssh:` / `name:` / `psw:`），实现见 `assets/_common.py` 的 `parse_login_config`（**唯一实现**，禁止在其它地方重复）。需要时直接 import：
 
 ```python
-import paramiko
+import sys; sys.path.insert(0, "assets")
+from _common import parse_login_config
+creds = parse_login_config("login.config")
+```
 
-HOST = "服务器IP"
-PORT = SSH端口
-USER = "用户名"
-PASS = "密码"
+### 远程操作首选：ssh-exec.py CLI
 
-# 执行单条命令
-client = paramiko.SSHClient()
-client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect(HOST, port=PORT, username=USER, password=PASS, timeout=15)
-stdin, stdout, stderr = client.exec_command("命令", timeout=60)
-print(stdout.read().decode())
-client.close()
+`assets/ssh-exec.py` 是本 skill 远程操作的**唯一入口**，覆盖 95% 场景。详见 SKILL.md 的"工具链"段。常用命令：
 
-# SFTP 上传文件
-sftp = client.open_sftp()
-with sftp.open("/远程/路径", "w") as f:
-    f.write(content)
-sftp.close()
+```bash
+python assets/ssh-exec.py exec "systemctl status astrbot --no-pager"
+python assets/ssh-exec.py tail astrbot --lines 200
+python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock"
+python assets/ssh-exec.py upload local.py /remote/path/main.py
+python assets/ssh-exec.py cat /opt/astrbot/data/cmd_config.json
+```
 
-# 交互式 shell（用于 astrbot init 等）
-channel = client.invoke_shell()
-channel.send("命令\n")
-# 自动应答
-channel.send("Y\n")
+### paramiko 片段（仅 invoke_shell 交互式场景）
+
+仅当遇到 `astrbot init` 这类必须交互应答的情况，才允许写最小 paramiko 片段。必须复用 `_common.py` 的连接逻辑，**不得重写**：
+
+```python
+import sys; sys.path.insert(0, "assets")
+from _common import parse_login_config, connect  # 复用，不重写
+
+creds = parse_login_config("login.config")
+c = connect(creds)
+try:
+    ch = c.invoke_shell()
+    ch.send("cd /opt/astrbot && astrbot init\n")
+    # 自动应答 Y/n 提示
+    import time; time.sleep(2)
+    ch.send("Y\n")
+    # 读取输出 ...
+finally:
+    c.close()
 ```
 
 ### 注意事项
 
 - 用 `;` 分隔命令，不用 `&&`（PowerShell 语法）
-- 含特殊字符的命令用 Python 脚本包装
-- 文件上传用 SFTP，避免 heredoc 和 BOM 问题
-- 交互式命令用 `invoke_shell()` + 自动应答
+- 含特殊字符的命令包装成 `ssh-exec.py exec "..."`；复杂内容用 `upload` 上传脚本到服务器再执行
+- 文件上传用 `ssh-exec.py upload`（SFTP），避免 heredoc 和 BOM 问题
+- 交互式命令才用 `invoke_shell()` + 自动应答

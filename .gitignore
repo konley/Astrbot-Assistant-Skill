@@ -1,0 +1,6 @@
+# AstrBot 框架源码缓存（本地参考用，由 skill 运行时按需浅克隆）
+/AstrBot/
+
+# Python 字节码缓存
+__pycache__/
+*.pyc

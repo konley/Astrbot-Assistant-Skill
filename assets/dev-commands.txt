@@ -2,9 +2,9 @@
 # 1) Clone AstrBot
 git clone https://github.com/AstrBotDevs/AstrBot
 
-# 2) Enter plugin directory
-mkdir -p AstrBot/data/plugins
-cd AstrBot/data/plugins
+# 2) Enter plugin directory (NOTE: data/addons/plugins/, not data/plugins/)
+mkdir -p AstrBot/data/addons/plugins
+cd AstrBot/data/addons/plugins
 
 # 3) Clone your plugin repository
 git clone <your_plugin_repo_url>

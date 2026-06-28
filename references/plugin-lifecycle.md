@@ -116,17 +116,14 @@
 - 修改 `cmd_config.json` 中影响核心生命周期的配置（如平台适配器、LLM Provider）
 - 系统级别故障（进程僵死、内存泄漏等）
 
-## 插件文件目录定位 SOP
+## 插件文件目录定位
 
-1. AstrBot 数据目录：通常 `~/.local/share/astrbot/` 或 `~/.config/astrbot/`
-2. 插件安装目录：`{data_dir}/addons/plugins/`
-3. 插件配置目录：`{data_dir}/plugin_configs/`
-4. 查找命令：
-   ```bash
-   # 查找数据目录
-   cat /etc/systemd/system/astrbot*.service 2>/dev/null | grep ExecStart
-   # 查找插件目录
-   find / -path "*/addons/plugins" -type d 2>/dev/null | head -5
-   # 搜索特定插件目录
-   find /root -path "*/addons/plugins/插件名" -type d 2>/dev/null
-   ```
+路径基线见 `references/config-reference.md`（权威表）。正常情况直接用基线路径；路径异常时的兜底查找：
+
+```bash
+# 确认 astrbot 工作目录
+python assets/ssh-exec.py exec "cat /etc/systemd/system/astrbot.service | grep -E 'WorkingDirectory|ExecStart'"
+# 兜底查找（用户自定义了路径时）
+python assets/ssh-exec.py exec "find / -path '*/data/addons/plugins' -type d 2>/dev/null | head -5"
+python assets/ssh-exec.py exec "ls /opt/astrbot/data/addons/plugins/"
+```

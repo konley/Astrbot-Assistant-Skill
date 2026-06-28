@@ -12,12 +12,12 @@
 
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot
-mkdir -p AstrBot/data/plugins
-cd AstrBot/data/plugins
+mkdir -p AstrBot/data/addons/plugins      # NOTE: addons/plugins/, not data/plugins/
+cd AstrBot/data/addons/plugins
 git clone <your_plugin_repo_url>
 ```
 
-4. Open AstrBot project in VS Code and locate plugin under data/plugins/<plugin_name>.
+4. Open AstrBot project in VS Code and locate plugin under data/addons/plugins/<plugin_name>.
 
 ## Must-have Metadata
 AstrBot relies on metadata.yaml to identify plugin metadata.
@@ -61,20 +61,8 @@ AstrBot version examples:
 - Use `assets/logo-process.py` to auto-convert any image to 256x256 centered-square PNG
 
 ## Config Schema (`_conf_schema.json`)
-可选，用于在 WebUI 渲染配置面板。
-
-- 支持的类型：`int`、`float`、`bool`、`string`、`text`、`list`、`file`、`object`、`template_list`
-- `type: "string"` 配合 `options` 数组可在 WebUI 显示为下拉菜单（不支持 `choices` 或 `type: "select"`）
-- 示例：
-  ```json
-  "default_tone": {
-    "description": "默认辞气",
-    "type": "string",
-    "default": "自动",
-    "options": ["自动", "温言", "辩经"],
-    "hint": "选择默认辞气风格"
-  }
-  ```
+可选，用于在 WebUI 渲染配置面板。支持的类型、`options` 下拉菜单语法、运行时读取流程等
+完整说明见 `references/source-config-schema.md` §2。
 
 ## Debug and Reload
 - Start AstrBot runtime for plugin debugging.
