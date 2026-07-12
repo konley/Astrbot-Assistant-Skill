@@ -94,6 +94,7 @@ cn_description: >-
 | `references/plugin-new-checklist.md` | 新插件官方检查清单：环境、metadata、适配器键、调试 |
 | `references/openapi-integration.md` | OpenAPI 端点、鉴权、测试策略（权威端点以 `astrbot-api.py --help` 为准） |
 | `references/compliance-checklist.md` | 合规检查 + 需求解析工作流 + 测试要求 |
+| `references/plugin-page-patterns.md` | **插件 Page 开发模式**（必读）：沙箱约束、bridge SDK、预览图、上传、确认框、路由 |
 
 ## 关键硬约束
 
@@ -103,6 +104,7 @@ cn_description: >-
 - `_conf_schema.json` 支持 type：int/float/bool/string/text/list/file/object/template_list；下拉菜单用 `type:"string"+options`，不支持 `choices`/`type:"select"`。详见 `source-config-schema.md` §2。
 - 插件持久化数据写 `data/plugin_data/{name}/`，不写源目录；网络请求用异步 aiohttp/httpx，不用 requests。
 - 生成代码提交前用 ruff 格式化。
+- **写带 Page 的插件前必须读 `references/plugin-page-patterns.md`**：Plugin Page 运行在 sandboxed iframe，`confirm()`/`alert()` 不可用，`<img src>` 不带 auth，上传须用 base64+apiPost，详见该文档。
 - **修改插件直接本地读/写，绝不走 SSH**：本地有插件源码的就用 `read`/`edit`，不需要 shell、ssh-exec、远程 cat 等。SSH 只用于查远程日志和改远端配置。
 
 ## 支持的适配器键（metadata.yaml support_platforms）
