@@ -108,18 +108,17 @@ https://docs.astrbot.app
 
 ```json
 {
-  "config_items": [
-    {
-      "key": "city_default",
-      "description": "默认城市",
-      "type": "string",
-      "default": "北京",
-      "hint": "查询天气时的默认城市",
-      "options": ["北京", "上海", "广州"]
-    }
-  ]
+  "city_default": {
+    "description": "默认城市",
+    "type": "string",
+    "default": "北京",
+    "hint": "查询天气时的默认城市",
+    "options": ["北京", "上海", "广州"]
+  }
 }
 ```
+
+> ⚠️ Schema 是**扁平 dict**：`{key: {type, default, ...}}`。不要用外层 `config_items` 数组包裹——框架源码 `astrbot_config.py:_parse_schema` 直接 `for k, v in schema.items()` 遍历，遇到数组会报 `TypeError: list indices must be integers or slices, not str`。
 
 ### 支持的 `type`
 
@@ -156,7 +155,7 @@ https://docs.astrbot.app
 
 | 字段 | 说明 |
 |------|------|
-| `key` | 配置键（snake_case），插件 `__init__(config)` 里 `config[key]` 读取 |
+| `key` | 配置键（snake_case），作为 schema dict 的 key，也是插件 `__init__(config)` 里 `config[key]` 读取的键 |
 | `description` | WebUI 显示的说明 |
 | `default` | 默认值（用户没改时用这个） |
 | `hint` | WebUI 输入框下的提示语（可选） |

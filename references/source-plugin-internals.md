@@ -129,7 +129,7 @@ uninstall(plugin_name, delete_config=False, delete_data=False):
 源码：`astrbot/core/config/plugin_config.py`（schema 解析） + WebUI 渲染。
 
 - 路径：插件根目录 `_conf_schema.json`
-- 结构：`{"config_items": [{"key":"x","type":"string","default":"...","description":"..."}]}`
+- 结构：`{"key1": {"type":"string","default":"...","description":"..."}, "key2": {...}}`（扁平 dict，无 `config_items` 包裹）
 - 加载时 schema 转为默认值 dict，传给插件 `__init__(config: dict)`
 - 用户在 WebUI 修改配置 → 写入 `data/plugin_configs/<plugin_name>.json`
 - 下次重载时读 `data/plugin_configs/<plugin_name>.json` 覆盖默认值

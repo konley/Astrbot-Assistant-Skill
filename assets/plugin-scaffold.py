@@ -108,18 +108,15 @@ REQUIREMENTS_TEMPLATE = """\
 
 SCHEMA_TEMPLATE = """\
 {{
-  "config_items": [
-{items}  ]
-}}
+{items}}}\
 """
 
 SCHEMA_ITEM_TEMPLATE = '''\
-    {{
-      "key": "{key}",
-      "description": "{desc}",
-      "type": "{type}",
-      "default": {default}
-    }}{comma}\
+  "{key}": {{
+    "description": "{desc}",
+    "type": "{type}",
+    "default": {default}
+  }}{comma}\
 '''
 
 SMOKE_TEST_TEMPLATE = '''\
