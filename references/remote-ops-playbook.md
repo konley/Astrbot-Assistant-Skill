@@ -147,7 +147,8 @@ python "$A\config-tool.py" backup
 ```powershell
 # 本地改完源码后
 python "$A\ssh-exec.py" sync-plugin "C:\path\to\my_plugin" --name my_plugin
-# 等价 upload-dir 到 /opt/astrbot/data/addons/plugins/my_plugin
+# 远端根目录自动解析：login.config plugins_dir → addons/plugins → data/plugins（以远端真实存在为准）
+# 可用 --remote-root 强制指定
 
 # dashboard 只监听 127.0.0.1 时用 --via-ssh
 python "$A\astrbot-api.py" --via-ssh --dash-port 6185 plugins reload --name my_plugin

@@ -93,6 +93,9 @@ python scripts/ssh-exec.py sync-plugin ./astrbot_plugin_example --name astrbot_p
 python scripts/astrbot-api.py --via-ssh plugins reload --name astrbot_plugin_example
 ```
 
+> `sync-plugin` 会探测远端插件根目录：若 `addons/plugins` 不存在，自动回退到已存在的 `data/plugins`（或 login.config 中 discover 写入的路径）。
+
+
 ### 2.5 首次 git 身份锁定
 
 ```bash

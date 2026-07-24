@@ -19,7 +19,9 @@
 | astrbot 命令 | `/root/.local/bin/astrbot` |
 | systemd 服务 | `/etc/systemd/system/astrbot.service` |
 
-> ⚠️ 历史版本曾用 `data/plugins/`，当前版本统一为 `data/addons/plugins/`。本地开发场景（clone AstrBot repo）的相对路径基线为 `<repo>/AstrBot/data/addons/plugins/`。
+> ⚠️ 新版默认 `data/addons/plugins/`；不少线上实例仍是历史 `data/plugins/`。
+> `sync-plugin` / `diagnose` 解析顺序：`--remote-root` → `login.config [paths].plugins_dir` → 远端存在的 modern/legacy 候选。
+> 建议先 `ssh-exec.py config discover --write` 把真实路径写回 login.config。本地开发相对路径基线仍为 `<repo>/AstrBot/data/addons/plugins/`。
 
 ### cmd_config.json 关键字段
 

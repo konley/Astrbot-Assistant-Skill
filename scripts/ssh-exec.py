@@ -80,7 +80,8 @@ def _configure_stdio() -> None:
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_PLUGIN_ROOT = "/opt/astrbot/data/addons/plugins"
+DEFAULT_PLUGIN_ROOT = "/opt/astrbot/data/addons/plugins"  # modern default
+DEFAULT_PLUGIN_ROOT_LEGACY = "/opt/astrbot/data/plugins"  # older installs
 DEFAULT_CMD_CONFIG = "/opt/astrbot/data/cmd_config.json"
 
 
@@ -88,13 +89,143 @@ def _paths(creds: Credentials):
     return getattr(creds, "paths", None)
 
 
-def _plugin_root(creds: Credentials, override: str | None = None) -> str:
+def _dedupe_paths(paths: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in paths:
+        p = (raw or "").strip().rstrip("/")
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+    return out
+
+
+def plugin_root_candidates(
+    creds: Credentials | None = None,
+    override: str | None = None,
+) -> list[str]:
+    """Ordered plugin-dir candidates: override → login.config → modern → legacy."""
+    cands: list[str] = []
     if override:
-        return override.rstrip("/")
+        cands.append(override)
+
+    p = _paths(creds) if creds is not None else None
+    if p and getattr(p, "plugins_dir", None):
+        cands.append(str(p.plugins_dir))
+
+    root = "/opt/astrbot"
+    data = "/opt/astrbot/data"
+    if p is not None:
+        root = (getattr(p, "astrbot_root", None) or root).rstrip("/") or root
+        data = (getattr(p, "data_dir", None) or f"{root}/data").rstrip("/") or f"{root}/data"
+
+    cands.append(f"{data}/addons/plugins")
+    cands.append(f"{data}/plugins")
+    # absolute stock fallbacks (in case data_dir was customized oddly)
+    cands.append(DEFAULT_PLUGIN_ROOT)
+    cands.append(DEFAULT_PLUGIN_ROOT_LEGACY)
+    return _dedupe_paths(cands)
+
+
+def _remote_existing_dirs(
+    creds: Credentials,
+    paths: list[str],
+    *,
+    client=None,
+) -> list[str]:
+    """Return subset of paths that exist as directories on the remote host."""
+    if not paths:
+        return []
+    # One SSH round-trip: print existing dirs, one per line.
+    quoted = " ".join(_shell_quote(p) for p in paths)
+    cmd = (
+        "for d in "
+        + quoted
+        + '; do if [ -d "$d" ]; then printf "%s\n" "$d"; fi; done'
+    )
+    r = exec_command(creds, cmd, client=client, timeout=30)
+    found: list[str] = []
+    for line in (r.stdout or "").splitlines():
+        s = line.strip().rstrip("/")
+        if s:
+            found.append(s)
+    # preserve candidate order
+    order = {p: i for i, p in enumerate(paths)}
+    found_set = set(found)
+    return [p for p in paths if p in found_set]
+
+
+def resolve_plugin_root(
+    creds: Credentials,
+    override: str | None = None,
+    *,
+    client=None,
+    verify_remote: bool = True,
+    log: bool = True,
+) -> str:
+    """Resolve remote plugins directory.
+
+    Preference:
+      1) explicit --remote-root / override
+      2) login.config [paths].plugins_dir if it exists remotely
+      3) first existing among modern/legacy candidates
+      4) configured/modern default (upload may create it)
+    """
+    cands = plugin_root_candidates(creds, override)
+    if not verify_remote:
+        return cands[0]
+
+    existing = _remote_existing_dirs(creds, cands, client=client)
+    if override:
+        ov = override.rstrip("/")
+        if ov in existing:
+            return ov
+        if existing:
+            chosen = existing[0]
+            if log:
+                sys.stderr.write(
+                    f"warn: --remote-root {ov} missing; falling back to {chosen}\n"
+                )
+            return chosen
+        if log:
+            sys.stderr.write(
+                f"warn: --remote-root {ov} missing and no candidate exists; using it anyway\n"
+            )
+        return ov
+
+    configured = None
     p = _paths(creds)
     if p and getattr(p, "plugins_dir", None):
-        return str(p.plugins_dir).rstrip("/")
-    return DEFAULT_PLUGIN_ROOT
+        configured = str(p.plugins_dir).rstrip("/")
+
+    if configured and configured in existing:
+        return configured
+
+    if existing:
+        chosen = existing[0]
+        if configured and configured != chosen and log:
+            sys.stderr.write(
+                f"warn: configured plugins_dir {configured} missing; "
+                f"using existing {chosen}\n"
+            )
+        elif log and chosen != DEFAULT_PLUGIN_ROOT:
+            sys.stderr.write(f"info: using plugin root {chosen}\n")
+        return chosen
+
+    # nothing exists yet — prefer configured, else modern default
+    fallback = configured or cands[0]
+    if log:
+        sys.stderr.write(
+            f"warn: no remote plugin dir found among candidates; "
+            f"will use {fallback} (may be created on upload)\n"
+        )
+    return fallback
+
+
+def _plugin_root(creds: Credentials, override: str | None = None) -> str:
+    """Backward-compatible helper (no remote probe). Prefer resolve_plugin_root."""
+    return plugin_root_candidates(creds, override)[0]
 
 
 def _cmd_config(creds: Credentials) -> str:
@@ -476,9 +607,11 @@ def cmd_trace(
 
 def cmd_diagnose(creds: Credentials, full: bool, as_json: bool) -> int:
     unit = _astrbot_unit(creds)
-    plugin_root = _plugin_root(creds)
     cmd_config = _cmd_config(creds)
     client = connect(creds)
+    plugin_root = resolve_plugin_root(
+        creds, None, client=client, verify_remote=True, log=False
+    )
     try:
         steps: list[tuple[str, str]] = [
             (
@@ -656,7 +789,7 @@ def cmd_sync_plugin(
     creds: Credentials,
     local_dir: str,
     name: str | None,
-    remote_root: str,
+    remote_root: str | None,
 ) -> int:
     local = Path(local_dir).resolve()
     if not local.is_dir():
@@ -667,9 +800,21 @@ def cmd_sync_plugin(
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", plugin_name):
         sys.stderr.write(f"invalid plugin name: {plugin_name!r}\n")
         return 2
-    remote = f"{remote_root.rstrip('/')}/{plugin_name}"
-    sys.stdout.write(f"sync-plugin {local} -> {remote}\n")
-    return cmd_upload_dir(creds, str(local), remote)
+    client = connect(creds)
+    try:
+        root = resolve_plugin_root(
+            creds,
+            remote_root,
+            client=client,
+            verify_remote=True,
+            log=True,
+        )
+        remote = f"{root.rstrip('/')}/{plugin_name}"
+        sys.stdout.write(f"sync-plugin {local} -> {remote}\n")
+        # reuse same connection for upload_dir via underlying helpers? upload_dir opens own.
+        return cmd_upload_dir(creds, str(local), remote)
+    finally:
+        client.close()
 
 
 
@@ -1093,14 +1238,14 @@ def main() -> int:
 
     s_sp = sub.add_parser(
         "sync-plugin",
-        help=f"upload local plugin dir to {DEFAULT_PLUGIN_ROOT}/<name>",
+        help="upload local plugin dir; remote root auto-resolves login.config / modern addons/plugins / legacy data/plugins",
     )
     s_sp.add_argument("local_dir")
     s_sp.add_argument("--name", help="remote plugin folder name (default: local dir name)")
     s_sp.add_argument(
         "--remote-root",
         default=None,
-        help="override plugin root (default: login.config [paths].plugins_dir or /opt/astrbot/data/addons/plugins)",
+        help="override plugin root (default: resolve login.config / modern / legacy by remote existence)",
     )
 
     s_init = sub.add_parser(

@@ -95,7 +95,7 @@ cn_description: >-
 | `ssh-exec.py tunnel print\|open` | 本地端口转发命令/拉起 |
 | `ssh-exec.py framework check\|sync` | 版本 pin 缓存 vs 远端 runtime（禁 latest fallback） |
 | `ssh-exec.py config discover [--write]` | 探测远端布局并建议/回填 login.config [paths]/port |
-| `ssh-exec.py sync-plugin` | 插件同步到 `[paths].plugins_dir` |
+| `ssh-exec.py sync-plugin` | 插件同步；远端根目录按 login.config → modern `addons/plugins` → legacy `data/plugins` 探测存在性自动回退 |
 | `config-tool.py` | 安全改 cmd_config / plugin_configs |
 | `astrbot-api.py --via-ssh` | 插件 list/reload/install 等 |
 | `plugin-scaffold.py` / `plugin-check.py` | 脚手架 / 合规 |
@@ -104,7 +104,7 @@ cn_description: >-
 ## 路径基线（可配置）
 
 默认生产：`/opt/astrbot`（可用 `login.config [paths]` 覆盖）。  
-插件安装：`data/addons/plugins/{name}/`（**非**历史 `data/plugins/`）。  
+插件安装：优先 `data/addons/plugins/{name}/`；旧实例可能是 `data/plugins/`。`sync-plugin` / `diagnose` 会探测远端真实目录并自动回退；以 `config discover` 与 login.config `[paths].plugins_dir` 为准。  
 权威表：`references/config-reference.md`。
 
 ## login.config
@@ -162,7 +162,7 @@ api_key =
 1. 远程只走 `scripts/` CLI；禁止临时 paramiko/sed 改 JSON。  
 2. 禁止随意重启：重载 ≫ 重装 ≫ 重启；重启须用户确认 + `service … --yes`。  
 3. NapCat 反向 WS 地址必须带 `/ws`。  
-4. 插件路径 `data/addons/plugins/`；持久化 `data/plugin_data/`；网络用异步 aiohttp/httpx。  
+4. 插件路径优先 `data/addons/plugins/`（旧实例可回退 `data/plugins/`，以远端探测/`config discover` 为准）；持久化 `data/plugin_data/`；网络用异步 aiohttp/httpx。  
 5. git 只认 login.config 个人身份；交付 `plugin-check` 无 FAIL。  
 6. 带 Page：先读 `plugin-page-patterns.md`（iframe 沙箱限制）。  
 7. 改插件只在本地项目目录；同步用 `sync-plugin`。  
