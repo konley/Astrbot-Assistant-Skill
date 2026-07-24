@@ -172,6 +172,8 @@ api_key =
 | `[dashboard].api_key` | 否 | Dashboard API Key（`X-API-Key`；WebUI 创建） |
 | 旧版 `[git.personal]` / multi-profile | 兼容 | 仍可解析，**新配置请用扁平 [git]** |
 
+自动发现远端布局：`python scripts/ssh-exec.py config discover [--write]`
+
 插件身份工具：`python scripts/git-identity.py show|status|fix|check-push`  
 插件合规：`python scripts/plugin-check.py <dir>`  
 详见 `references/plugin-dev-playbook.md`。
@@ -257,7 +259,7 @@ print(invoke_shell_send(creds, ["cd /opt/astrbot", "astrbot init", "Y"]))
 |----|------|------|
 | `astrbot_root` | `/opt/astrbot` | 安装根 |
 | `data_dir` | `{root}/data` | 数据目录 |
-| `plugins_dir` | `{data}/addons/plugins` | 插件安装目录 |
+| `plugins_dir` | `{data}/addons/plugins`（部分实例仍为 `{data}/plugins`） | 插件安装目录；以 `config discover` 为准 |
 | `plugin_configs_dir` | `{data}/plugin_configs` | 插件配置 |
 | `plugin_data_dir` | `{data}/plugin_data` | 插件持久化 |
 | `cmd_config` | `{data}/cmd_config.json` | 主配置 |
@@ -266,3 +268,9 @@ print(invoke_shell_send(creds, ["cd /opt/astrbot", "astrbot init", "Y"]))
 | `napcat_unit` | _(空)_ | 可选 |
 
 `config-tool` / `sync-plugin` / `service` / `diagnose` 会读取该段。
+
+## 编码与 BOM
+
+`login.config` 与远端 `cmd_config.json` 均应使用 **UTF-8 无 BOM**。
+Windows 记事本有时会写入 BOM（字节 `EF BB BF`），会导致 `json.load` 报错。
+skill 读取时会 strip BOM；写回使用无 BOM。可用 `config discover` 检测远端 BOM。

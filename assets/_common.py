@@ -1,4 +1,4 @@
-﻿"""Compatibility shim: import from scripts._common via path insert."""
+"""Compatibility shim: import from scripts._common via path insert."""
 from __future__ import annotations
 import sys
 from pathlib import Path

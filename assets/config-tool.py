@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Compatibility shim: tools moved to ../scripts/. Prefer scripts/<name>.py."""
 from __future__ import annotations
 import runpy

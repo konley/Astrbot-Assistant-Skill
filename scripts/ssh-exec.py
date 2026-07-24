@@ -48,6 +48,12 @@ from _common import (  # noqa: E402
     write_file,
     write_login_config_template,
 )
+from config_discover import (  # noqa: E402
+    apply_writes,
+    build_report,
+    format_report_text,
+    probe_remote,
+)
 from framework_cache import (  # noqa: E402
     build_check_payload,
     ensure_version_cache,
@@ -934,6 +940,45 @@ def cmd_framework(
     return 2
 
 
+
+def cmd_config_discover(
+    creds: Credentials,
+    *,
+    write: bool,
+    force: bool,
+    as_json: bool,
+    path: str | None,
+) -> int:
+    """Probe remote layout and suggest (optionally write) login.config fills."""
+    try:
+        remote = probe_remote(creds)
+    except Exception as e:
+        sys.stderr.write(f"config discover probe failed: {type(e).__name__}: {e}\n")
+        return 1
+    report = build_report(creds, remote, force=force)
+    target = None
+    if write:
+        if path:
+            target = Path(path).expanduser()
+        else:
+            src = getattr(creds, "source", "") or ""
+            target = Path(src) if src and Path(src).is_file() else preferred_login_config_path()
+        report.login_config = str(target)
+        report = apply_writes(target, report, force=force)
+        if report.writes:
+            sys.stdout.write(f"updated {target}\n")
+        else:
+            sys.stdout.write(f"no writes applied to {target}\n")
+    if as_json:
+        sys.stdout.write(json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n")
+    else:
+        sys.stdout.write(format_report_text(report))
+    # non-zero if mismatches need manual attention and not forced
+    if any(a.action == "manual" for a in report.advice) and not force:
+        return 3
+    return 0
+
+
 def cmd_init_config(path: str | None, fmt: str, force: bool) -> int:
     """Create a fill-in login.config template (INI or JSON)."""
     target = Path(path).expanduser() if path else preferred_login_config_path(fmt=fmt)
@@ -1141,6 +1186,32 @@ def main() -> int:
         help="check against framework-cache.meta.json only (no SSH remote probe)",
     )
 
+
+    s_cfg = sub.add_parser(
+        "config",
+        help="discover remote layout and suggest/write login.config [paths]/[dashboard]",
+    )
+    s_cfg.add_argument(
+        "cfg_action",
+        choices=["discover"],
+        help="discover: probe remote and compare with login.config",
+    )
+    s_cfg.add_argument(
+        "--write",
+        action="store_true",
+        help="write fill/update values into login.config (backup .bak-discover once)",
+    )
+    s_cfg.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite mismatched discovered fields (not only empty ones)",
+    )
+    s_cfg.add_argument(
+        "--path",
+        help="login.config path for --write (default: credentials source)",
+    )
+    s_cfg.add_argument("--json", action="store_true", dest="as_json")
+
     args = p.parse_args()
 
     if args.action == "init-config":
@@ -1240,6 +1311,14 @@ def main() -> int:
                 args.forward,
                 args.ssh_bin,
                 args.background,
+            )
+        if args.action == "config":
+            return cmd_config_discover(
+                creds,
+                write=bool(getattr(args, "write", False)),
+                force=bool(getattr(args, "force", False)),
+                as_json=bool(getattr(args, "as_json", False)),
+                path=getattr(args, "path", None),
             )
         if args.action == "framework":
             return cmd_framework(

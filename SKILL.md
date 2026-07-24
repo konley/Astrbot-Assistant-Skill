@@ -94,6 +94,7 @@ cn_description: >-
 | `ssh-exec.py service …` | systemd 巡检/enable/logs（restart 需 --yes） |
 | `ssh-exec.py tunnel print\|open` | 本地端口转发命令/拉起 |
 | `ssh-exec.py framework check\|sync` | 版本 pin 缓存 vs 远端 runtime（禁 latest fallback） |
+| `ssh-exec.py config discover [--write]` | 探测远端布局并建议/回填 login.config [paths]/port |
 | `ssh-exec.py sync-plugin` | 插件同步到 `[paths].plugins_dir` |
 | `config-tool.py` | 安全改 cmd_config / plugin_configs |
 | `astrbot-api.py --via-ssh` | 插件 list/reload/install 等 |
@@ -137,7 +138,7 @@ api_key =
 ```
 
 缺失时 `init-config` 生成模板。搜索顺序：`--login-config` → env → cwd 向上 → skill 根/父目录。  
-**不要把 login.config 提交到 git**。
+**不要把 login.config 提交到 git**。本地/远端配置文件均应 **UTF-8 无 BOM**。
 
 ## 参考文档（按需加载）
 

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 AstrBot Skill - Plugin compliance checker + version field helper.
 
