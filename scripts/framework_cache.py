@@ -383,6 +383,75 @@ def _fetch_tag_into_repo(repo: Path, tag: str, *, log: Callable[[str], None] | N
     return _run(["git", "checkout", "--force", tag], cwd=repo, log=log)
 
 
+def _path_present(path: Path) -> bool:
+    """True if path exists or is a broken symlink/junction."""
+    try:
+        return path.exists() or path.is_symlink()
+    except OSError:
+        return True
+
+
+def _remove_path(path: Path, *, log: Callable[[str], None] | None = None) -> bool:
+    """Best-effort remove file/dir/symlink/junction so activate can replace it.
+
+    Windows often leaves a real directory (previous full clone). rmtree alone
+    can soft-fail; rename-aside then delete is more reliable when files are
+    briefly locked.
+    """
+    if not _path_present(path):
+        return True
+
+    # Symlink / junction / file first
+    try:
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+            return not _path_present(path)
+    except OSError as e:
+        if log:
+            log(f"warn: unlink {path} failed: {e}")
+
+    # Empty dir / junction via rmdir
+    try:
+        path.rmdir()
+        if not _path_present(path):
+            return True
+    except OSError:
+        pass
+
+    # Rename aside then delete (helps on Windows with residual handles)
+    trash = path.with_name(f".{path.name}.trash-{os.getpid()}-{int(time.time())}")
+    try:
+        if _path_present(trash):
+            shutil.rmtree(trash, ignore_errors=True)
+            try:
+                if trash.is_symlink() or trash.is_file():
+                    trash.unlink()
+            except OSError:
+                pass
+        path.rename(trash)
+        shutil.rmtree(trash, ignore_errors=True)
+        try:
+            if trash.is_symlink() or trash.is_file():
+                trash.unlink()
+            elif trash.exists():
+                trash.rmdir()
+        except OSError:
+            pass
+    except OSError as e:
+        if log:
+            log(f"warn: rename-aside {path} failed: {e}")
+        shutil.rmtree(path, ignore_errors=True)
+
+    if _path_present(path):
+        # last resort direct rmtree
+        shutil.rmtree(path, ignore_errors=True)
+
+    ok = not _path_present(path)
+    if not ok and log:
+        log(f"error: could not remove existing path: {path}")
+    return ok
+
+
 def _activate_cache(versioned: Path, active: Path, *, log: Callable[[str], None] | None = None) -> bool:
     """Make active AstrBot/ point at versioned tree (junction/symlink or copy replace)."""
     versioned = versioned.resolve()
@@ -396,20 +465,15 @@ def _activate_cache(versioned: Path, active: Path, *, log: Callable[[str], None]
     except OSError:
         pass
 
-    # Remove existing active
-    if active.is_symlink() or active.exists():
-        try:
-            if active.is_symlink() or active.is_file():
-                active.unlink()
-            else:
-                # directory: try rmdir if junction, else rmtree
-                try:
-                    active.rmdir()
-                except OSError:
-                    shutil.rmtree(active, ignore_errors=True)
-        except OSError as e:
+    # Must clear existing active before symlink/junction/copytree
+    if _path_present(active):
+        if not _remove_path(active, log=log):
             if log:
-                log(f"warn: remove active failed: {e}")
+                log(
+                    "activate blocked: cannot replace existing AstrBot/ "
+                    "(close handles / delete manually, then re-run sync)"
+                )
+            return False
 
     # Prefer symlink / directory junction
     try:
@@ -417,8 +481,9 @@ def _activate_cache(versioned: Path, active: Path, *, log: Callable[[str], None]
         if log:
             log(f"activated symlink {active} -> {versioned}")
         return True
-    except OSError:
-        pass
+    except OSError as e:
+        if log:
+            log(f"symlink unavailable: {e}")
 
     if os.name == "nt":
         # Directory junction does not require admin
@@ -427,12 +492,16 @@ def _activate_cache(versioned: Path, active: Path, *, log: Callable[[str], None]
             log=log,
         )
         if rc == 0 and active.exists():
+            if log:
+                log(f"activated junction {active} -> {versioned}")
             return True
 
     # Fallback: copy tree into active (heavier but portable)
     if log:
         log(f"fallback: copy tree {versioned} -> {active}")
     try:
+        if _path_present(active) and not _remove_path(active, log=log):
+            return False
         shutil.copytree(versioned, active)
         return True
     except OSError as e:

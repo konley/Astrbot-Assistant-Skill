@@ -1,5 +1,6 @@
 # AstrBot framework source cache (local reference; shallow-cloned on demand)
 /AstrBot/
+/AstrBot
 /cache/AstrBot/
 framework-cache.meta.json
 
