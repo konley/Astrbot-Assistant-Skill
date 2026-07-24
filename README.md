@@ -45,6 +45,7 @@ python "$A\ssh-exec.py" framework check
 python "$A\config-tool.py" get platform.0
 python "$A\astrbot-api.py" --via-ssh plugins list
 python "$A\plugin-scaffold.py" --from-login-config --name astrbot_plugin_demo --desc "demo"
+# optional lifecycle: add --with-lifecycle
 python "$A\plugin-check.py" .\astrbot_plugin_demo
 python "$A\git-identity.py" check-push --repo .\astrbot_plugin_demo
 ```
@@ -73,6 +74,8 @@ python scripts/ssh-exec.py framework sync --yes
 |------|------|
 | 远程排障 | `references/remote-ops-playbook.md` |
 | 插件开发 | `references/plugin-dev-playbook.md` |
+| API 速查 | `references/api-cheatsheet.md` |
+| Agent / Tools | `references/agent-tools.md` |
 | Debug | `references/debug-handbook.md` |
 | 版本对齐 | `references/source-version-align.md` |
 | 配置权威表 | `references/config-reference.md` |

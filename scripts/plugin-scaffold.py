@@ -26,6 +26,8 @@ Usage:
     python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --from-login-config
     # bare minimum manual author
     python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --author me
+    # optional lifecycle template (initialize/terminate + aiohttp)
+    python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --author me --with-lifecycle
 
     # with GitHub repo + deps + adapter constraint + basic config schema
     python plugin-scaffold.py \\
@@ -72,37 +74,90 @@ MAIN_TEMPLATE = '''\
 """
 from __future__ import annotations
 
-import asyncio
-import logging
-from typing import Any
-
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.provider import ProviderRequest
-from astrbot.api.star import Star, register
-from astrbot.core.platform.astr_message_message import MessageResult
-
-logger = logging.getLogger(__name__)
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star, register
 
 
 @register("{name}", "{author}", "{desc}", version="0.1.0"{repo_kw})
 class {class_name}(Star):
-    def __init__(self, config: dict | None = None):
-        super().__init__()
+    def __init__(self, context: Context, config: dict | None = None):
+        super().__init__(context)
         self.config = config or {{}}
 
     @filter.command("hello")
     async def hello(self, event: AstrMessageEvent):
         """Reply with a greeting. Trigger: /hello"""
-        await event.plain_result(f"Hello from {name}!")
-
-    @filter.on_llm_request()
-    async def on_llm_request(self, event: AstrMessageEvent, request: ProviderRequest):
-        """Hook called before each LLM request. Remove if not needed."""
-        request.system_prompt += "\\n[plugin {name} active]"
+        yield event.plain_result(f"Hello from {name}!")
 
     async def terminate(self):
         """Called when plugin is reloaded/unloaded. Clean up resources."""
         pass
+'''
+
+# Optional richer lifecycle template (--with-lifecycle). Default remains minimal.
+MAIN_LIFECYCLE_TEMPLATE = '''\
+"""AstrBot plugin: {name}.
+
+{desc}
+
+Includes initialize/terminate resource management. Remove unused parts freely.
+"""
+from __future__ import annotations
+
+import asyncio
+from typing import Optional
+
+import aiohttp
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star, StarTools, register
+
+
+@register("{name}", "{author}", "{desc}", version="0.1.0"{repo_kw})
+class {class_name}(Star):
+    def __init__(self, context: Context, config: dict | None = None):
+        super().__init__(context)
+        self.config = config or {{}}
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._bg_task: Optional[asyncio.Task] = None
+
+    async def initialize(self) -> None:
+        """Called after the plugin is activated."""
+        logger.info("{name} initialize")
+        self._session = aiohttp.ClientSession()
+        self._bg_task = asyncio.create_task(self._heartbeat())
+
+    async def terminate(self) -> None:
+        """Called on unload/reload. Must release resources."""
+        logger.info("{name} terminate — cleaning up")
+        if self._bg_task and not self._bg_task.done():
+            self._bg_task.cancel()
+            try:
+                await self._bg_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"bg task cancel error: {{e}}")
+        if self._session and not self._session.closed:
+            await self._session.close()
+        await self._save_state()
+
+    async def _heartbeat(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(1800)
+                logger.debug("{name} heartbeat")
+        except asyncio.CancelledError:
+            raise
+
+    async def _save_state(self) -> None:
+        data_dir = StarTools.get_data_dir()
+        logger.info(f"plugin data dir: {{data_dir}}")
+
+    @filter.command("hello")
+    async def hello(self, event: AstrMessageEvent):
+        """Reply with a greeting. Trigger: /hello"""
+        yield event.plain_result(f"Hello from {name}!")
 '''
 
 REQUIREMENTS_TEMPLATE = """\
@@ -300,6 +355,7 @@ def generate(
     astrbot_version: str | None,
     reqs: list[str],
     config_specs: list[str],
+    with_lifecycle: bool = False,
 ) -> Path:
     plugin_dir = out_dir / name
     if plugin_dir.exists():
@@ -323,7 +379,8 @@ def generate(
     _write_no_bom(plugin_dir / "metadata.yaml", metadata)
 
     # main.py
-    main_code = MAIN_TEMPLATE.format(
+    main_tpl = MAIN_LIFECYCLE_TEMPLATE if with_lifecycle else MAIN_TEMPLATE
+    main_code = main_tpl.format(
         name=name, desc=desc, author=author,
         class_name=_camel(name),
         repo_kw=f', repo="{repo}"' if repo else "",
@@ -331,9 +388,12 @@ def generate(
     _write_no_bom(plugin_dir / "main.py", main_code)
 
     # requirements.txt
+    final_reqs = list(reqs)
+    if with_lifecycle and "aiohttp" not in final_reqs:
+        final_reqs.append("aiohttp")
     req_text = REQUIREMENTS_TEMPLATE.format(
         name=name,
-        reqs="\n".join(reqs) if reqs else "# (no third-party dependencies yet)",
+        reqs="\n".join(final_reqs) if final_reqs else "# (no third-party dependencies yet)",
     )
     _write_no_bom(plugin_dir / "requirements.txt", req_text)
 
@@ -403,6 +463,11 @@ def main() -> int:
                    help='third-party deps for requirements.txt')
     p.add_argument("--config", nargs="*", default=[],
                    help='config schema items, each: key:type:desc[:default]')
+    p.add_argument(
+        "--with-lifecycle",
+        action="store_true",
+        help="use initialize/terminate lifecycle template (aiohttp session + bg task). Default stays minimal.",
+    )
     p.add_argument("--out", default=".",
                    help='output parent dir (default: cwd); plugin created under <out>/<name>/')
     p.add_argument(
@@ -473,6 +538,7 @@ def main() -> int:
         astrbot_version=args.astrbot_version,
         reqs=args.reqs,
         config_specs=args.config,
+        with_lifecycle=args.with_lifecycle,
     )
 
     sys.stdout.write(f"generated plugin at: {plugin_dir}\n")
@@ -484,6 +550,8 @@ def main() -> int:
     )
     if github_root:
         sys.stdout.write(f"     suggested create: {github_root}/{args.name}\n")
+    if args.with_lifecycle:
+        sys.stdout.write("  note: generated with --with-lifecycle (initialize/terminate)\n")
     sys.stdout.write(f"  4) python scripts/plugin-check.py {plugin_dir}\n")
     sys.stdout.write("next steps:\n")
     sys.stdout.write(f"  cd {plugin_dir}\n")

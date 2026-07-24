@@ -227,6 +227,29 @@ def check_plugin(
                 f"repo={repo!r} (expected default {expected_repo!r})",
             )
 
+    # Recommended metadata (WARN only — do not FAIL old plugins yet)
+    if not meta.get("display_name"):
+        rep.add(
+            "WARN",
+            "metadata.display_name",
+            "display_name missing (recommended for WebUI; scaffold writes it by default)",
+        )
+    av = meta.get("astrbot_version")
+    if av in (None, ""):
+        rep.add(
+            "WARN",
+            "metadata.astrbot_version",
+            'astrbot_version missing (recommended e.g. ">=4.16,<5"; keep WARN until ecosystem migrates)',
+        )
+    else:
+        av_s = str(av).strip()
+        if av_s and not any(ch in av_s for ch in "<>="):
+            rep.add(
+                "WARN",
+                "metadata.astrbot_version.format",
+                "astrbot_version=%r should be a PEP 440 specifier (e.g. \">=4.16,<5\")" % (av_s,),
+            )
+
     platforms = meta.get("support_platforms")
     if platforms is not None:
         if isinstance(platforms, str):

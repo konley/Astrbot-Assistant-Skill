@@ -85,3 +85,11 @@ AstrBot version examples:
 - New plugin guide: https://docs.astrbot.app/dev/star/plugin-new.html
 - Minimal example: https://docs.astrbot.app/dev/star/guides/simple.html
 - Plugin publish: https://docs.astrbot.app/dev/star/plugin-publish.html
+
+
+## API / Agent 参考（按需）
+
+- 通用 API：`api-cheatsheet.md`（写代码前 `framework check`）
+- Tool / cron / subagent：`agent-tools.md`
+- 需要资源清理模板：`plugin-scaffold.py --with-lifecycle`
+- `plugin-check` 对 `display_name` / `astrbot_version` 目前仅 **WARN**（兼容旧插件）

@@ -7,7 +7,7 @@
 
 | 工具 | 作用 |
 |---|---|
-| `plugin-scaffold.py` | 生成合规骨架；`--from-login-config` 注入 author/github |
+| `plugin-scaffold.py` | 生成合规骨架；`--from-login-config` 注入 author/github；可选 `--with-lifecycle` |
 | `plugin-check.py` | 元数据/logo/repo/BOM/@register 检查；`--bump` 升版 |
 | `git-identity.py` | 锁定 login.config 个人身份：`show` / `status` / `fix` / `check-push` |
 | `logo-process.py` | logo 处理（可选） |
@@ -77,7 +77,15 @@ python scripts/plugin-scaffold.py \
   --from-login-config \
   --repo auto
 # 或 --repo none / --repo https://github.com/you/astrbot_plugin_example
+# 需要 initialize/terminate 资源管理时再加：
+#   --with-lifecycle
 ```
+
+### 2.2.1 写 API / Agent 能力时
+
+- 通用 API 速查：`api-cheatsheet.md`（先 `framework check`）
+- Tool / tool_loop / cron / subagent / Agent hooks：`agent-tools.md`
+- 远程排障仍走 `remote-ops-playbook.md`，不要用开发文档替代运维契约
 
 ### 2.3 写业务 + 合规检查
 

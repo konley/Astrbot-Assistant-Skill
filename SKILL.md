@@ -7,13 +7,14 @@ description: >-
   compliance check + personal git-identity gate, local→remote plugin sync.
   Trigger when: AstrBot no-reply/errors/load-fail/405, NapCat deploy, remote ops,
   plugin create/fix/reload. Optional helpers: systemd service status, SSH tunnel
-  print/open, framework source version align, persona/provider config fields.
+  print/open, framework source version align, persona/provider config fields,
+  plugin API cheatsheet + Agent/tools guidance.
 cn_name: AstrBot 助手
 cn_description: >-
   AstrBot 远程运维与插件工程助手。部署/配置、NapCat 对接与 405 排查、SSH diagnose/trace、
   安全改配置、OpenAPI/插件生命周期、插件脚手架与合规检查、个人 git 身份门禁、插件同步。
   触发：不回复/报错/加载失败/405、插件开发、远程运维。可选：systemd 巡检、隧道命令、
-  框架源码版本对齐、人格/Provider 配置字段辅助。
+  框架源码版本对齐、人格/Provider 配置字段辅助、插件 API 速查与 Agent/Tools 指引。
 ---
 
 # AstrBot 助手
@@ -62,6 +63,22 @@ cn_description: >-
 5. commit/push 前：`git-identity.py check-push`；否则 `fix` 锁 local。
 6. 部署：`sync-plugin` + `astrbot-api.py --via-ssh plugins reload`。
 7. 禁止：公司 global 账号静默 push；禁止 SSH 里改业务源码。
+8. 写 API / tool / cron / subagent：先读 `references/api-cheatsheet.md`；Agent 专题再读 `references/agent-tools.md`。
+9. 骨架可选生命周期：`plugin-scaffold.py --with-lifecycle`（默认仍最小可用）。
+
+## 插件 API / Agent 文档路由（按需，不替代运维契约）
+
+远程排障 **仍走** 上文「远程操作执行契约」。以下仅在做/改插件代码时加载：
+
+| 需求 | 读 |
+|------|----|
+| 指令/消息/Context/schema 速查 | `references/api-cheatsheet.md` |
+| FunctionTool / tool_loop / cron / persona / subagent / Agent hooks | `references/agent-tools.md` |
+| Page / WebUI | `references/plugin-page-patterns.md` |
+| 机制深读 | `references/source-*.md`（先 `framework check`） |
+
+**两层 hook 不要混**：`@filter.*` 是插件事件层；`BaseAgentRunHooks` 是 Agent 运行层（见 `agent-tools.md` §0）。
+
 
 ## 框架源码缓存与版本对齐（防不兼容代码）
 
@@ -146,6 +163,8 @@ api_key =
 |------|--------|
 | `remote-ops-playbook.md` | 任何远程问题 |
 | `plugin-dev-playbook.md` | 做/改插件 |
+| `api-cheatsheet.md` | 插件 API / 消息 / Context 速查 |
+| `agent-tools.md` | Tool / tool_loop / cron / subagent / Agent hooks |
 | `debug-handbook.md` | 8 类故障 |
 | `source-version-align.md` | 查框架源码 / 写依赖 API 的代码前 |
 | `source-message-flow.md` / `source-plugin-internals.md` / `source-config-schema.md` | 机制精读（先对齐版本） |
@@ -166,7 +185,7 @@ api_key =
 5. git 只认 login.config 个人身份；交付 `plugin-check` 无 FAIL。  
 6. 带 Page：先读 `plugin-page-patterns.md`（iframe 沙箱限制）。  
 7. 改插件只在本地项目目录；同步用 `sync-plugin`。  
-8. 依赖框架 API 前必须 `framework check`；版本不一致先对齐。  
+8. 依赖框架 API 前必须 `framework check`；版本不一致先对齐；`api-cheatsheet`/`agent-tools` 是速查，不是 runtime 权威。  
 9. `_conf_schema.json` type 以 `source-config-schema.md` 为准（无 `choices`/`select`）。  
 10. 生成代码提交前 ruff 格式化。
 
