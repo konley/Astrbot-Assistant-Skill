@@ -1,8 +1,10 @@
 # AstrBot 配置 Schema 详解
 
+> **使用前：先** `python scripts/ssh-exec.py framework check` **对齐版本**。本文是符号/机制索引，行号可能漂移；以对齐后的 `./AstrBot/` 与远端 runtime 为准。
+
 按需加载此文件：当涉及 `cmd_config.json` 字段、`_conf_schema.json` 类型、 provider
-/ platform 配置项时使用。配合 `assets/config-tool.py`（远程读写 cmd_config.json）和
-`assets/plugin-scaffold.py`（生成 _conf_schema.json）一起看。
+/ platform 配置项时使用。配合 `scripts/config-tool.py`（远程读写 cmd_config.json）和
+`scripts/plugin-scaffold.py`（生成 _conf_schema.json）一起看。
 
 ## 1. `cmd_config.json` 顶层结构
 
@@ -183,20 +185,20 @@ class MyPlugin(Star):
 
 ```bash
 # 完整 dump
-python assets/config-tool.py show
+python scripts/config-tool.py show
 # 读字段
-python assets/config-tool.py get dashboard.port
-python assets/config-tool.py get platform.0.ws_reverse_port
-python assets/config-tool.py get provider.0.api_key
+python scripts/config-tool.py get dashboard.port
+python scripts/config-tool.py get platform.0.ws_reverse_port
+python scripts/config-tool.py get provider.0.api_key
 # 改字段（自动类型推断）
-python assets/config-tool.py set dashboard.port 62124
-python assets/config-tool.py set platform.0.enable true
+python scripts/config-tool.py set dashboard.port 62124
+python scripts/config-tool.py set platform.0.enable true
 # 批量改
-python assets/config-tool.py patch '{"dashboard.port":62124,"platform.0.enable":true}'
+python scripts/config-tool.py patch '{"dashboard.port":62124,"platform.0.enable":true}'
 # 删字段
-python assets/config-tool.py unset persona.temp_key
+python scripts/config-tool.py unset persona.temp_key
 # 备份
-python assets/config-tool.py backup --local cmd_config.bak.json
+python scripts/config-tool.py backup --local cmd_config.bak.json
 ```
 
 要点：

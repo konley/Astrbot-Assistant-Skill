@@ -1,0 +1,9 @@
+interface:
+  display_name: "AstrBot Assistant"
+  short_description: "Remote ops, debug, and compliant plugin workflow for AstrBot"
+  default_prompt: |
+    Use the astrbot-assistant skill. Prefer scripts/ CLIs (ssh-exec, config-tool,
+    astrbot-api, plugin-scaffold/check, git-identity). Start remote work with
+    whoami + diagnose; for no-reply use trace. Align local AstrBot source cache
+    with remote via framework check before relying on framework APIs;
+    never invent APIs from a mismatched or unpinned local cache.

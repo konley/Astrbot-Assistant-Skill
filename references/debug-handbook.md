@@ -1,9 +1,11 @@
 # AstrBot Debug Handbook
 
+> 全局硬约束（含禁止乱重启、/ws、本地改代码）见 `SKILL.md`，本节只写场景定位。
+
 按需加载此文件，覆盖 AstrBot / NapCat / 插件运行时最常见的 debug 场景。
 每节四段式：**症状 → 日志关键字定位 → 根因 → 修复**。所有"查日志"命令默认走
-`assets/ssh-exec.py`，所有"改配置"命令走 `assets/config-tool.py`，"调 API"
-走 `assets/astrbot-api.py`，**禁止**用 sed 改 JSON、用从头写的 paramiko 脚本查日志。
+`scripts/ssh-exec.py`，所有"改配置"命令走 `scripts/config-tool.py`，"调 API"
+走 `scripts/astrbot-api.py`，**禁止**用 sed 改 JSON、用从头写的 paramiko 脚本查日志。
 
 ## 0. 一键命令小抄
 
@@ -12,32 +14,32 @@
 
 ```bash
 # 开局 / 身份
-python assets/ssh-exec.py whoami
-python assets/ssh-exec.py diagnose
-python assets/ssh-exec.py diagnose --full
+python scripts/ssh-exec.py whoami
+python scripts/ssh-exec.py diagnose
+python scripts/ssh-exec.py diagnose --full
 
 # 不回复：消息流五步（单连接）
-python assets/ssh-exec.py trace --since "30 min ago"
+python scripts/ssh-exec.py trace --since "30 min ago"
 
 # 日志（profile 优先）
-python assets/ssh-exec.py log astrbot --since "30 min ago" --profile errors
-python assets/ssh-exec.py log astrbot --since "30 min ago" --profile llm
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock|completion"
-python assets/ssh-exec.py tail astrbot --lines 200
-python assets/ssh-exec.py tail napcat --lines 200
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --profile errors
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --profile llm
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock|completion"
+python scripts/ssh-exec.py tail astrbot --lines 200
+python scripts/ssh-exec.py tail napcat --lines 200
 
 # 批处理（单连接多命令）
-python assets/ssh-exec.py batch "systemctl is-active astrbot" "ss -tlnp | head"
+python scripts/ssh-exec.py batch "systemctl is-active astrbot" "ss -tlnp | head"
 
 # 配置 / 文件
-python assets/ssh-exec.py cat /opt/astrbot/data/cmd_config.json
-python assets/config-tool.py get platform.0
-python assets/ssh-exec.py write /tmp/x.json --file ./local.json
-python assets/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
+python scripts/ssh-exec.py cat /opt/astrbot/data/cmd_config.json
+python scripts/config-tool.py get platform.0
+python scripts/ssh-exec.py write /tmp/x.json --file ./local.json
+python scripts/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
 
 # WebUI（dashboard 仅 127.0.0.1 时加 --via-ssh）
-python assets/astrbot-api.py --via-ssh plugins list
-python assets/astrbot-api.py --via-ssh plugins reload --name <plugin>
+python scripts/astrbot-api.py --via-ssh plugins list
+python scripts/astrbot-api.py --via-ssh plugins reload --name <plugin>
 ```
 
 下方各节默认引用上述工具。
@@ -53,12 +55,12 @@ python assets/astrbot-api.py --via-ssh plugins reload --name <plugin>
 
 ### 定位
 ```bash
-python assets/ssh-exec.py log astrbot --since "10 min ago" --grep "error\|exception\|fail"
-python assets/ssh-exec.py log astrbot --since "30 min ago" --profile plugin --lines 100
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --grep "error\|exception\|fail"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --profile plugin --lines 100
 # 看插件目录
-python assets/ssh-exec.py exec "ls -la /opt/astrbot/data/addons/plugins/<plugin_name>/"
+python scripts/ssh-exec.py exec "ls -la /opt/astrbot/data/addons/plugins/<plugin_name>/"
 # 查 metadata.yaml 是否有 BOM
-python assets/ssh-exec.py exec "xxd /opt/astrbot/data/addons/plugins/<plugin_name>/metadata.yaml | head -1"
+python scripts/ssh-exec.py exec "xxd /opt/astrbot/data/addons/plugins/<plugin_name>/metadata.yaml | head -1"
 ```
 首字节应为 `7b`(`{`) 或字母，**不**应是 `ef bb bf`(UTF-8 BOM)。
 
@@ -74,8 +76,8 @@ python assets/ssh-exec.py exec "xxd /opt/astrbot/data/addons/plugins/<plugin_nam
 
 ### 修复后验证
 ```bash
-python assets/astrbot-api.py plugins reload --name <plugin_name>
-python assets/ssh-exec.py log astrbot --since "1 min ago" --grep "error\|reload"
+python scripts/astrbot-api.py plugins reload --name <plugin_name>
+python scripts/ssh-exec.py log astrbot --since "1 min ago" --grep "error\|reload"
 ```
 
 > 完整 BOM/JSON 校验流程见 `references/troubleshooting.md` #3 / #3.1 / #15
@@ -100,10 +102,10 @@ AstrBot 处理一条消息会依次打这五条日志（见 `references/source-m
 
 ```bash
 # 找出卡在哪一步
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "DIRECTED AT YOU"
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "ready to request"
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock"
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "completion\|Prepare to send"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "DIRECTED AT YOU"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "ready to request"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "completion\|Prepare to send"
 ```
 
 ### 根因分类
@@ -123,7 +125,7 @@ python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "completion\|P
 - **修复**：
   ```bash
   # 立即恢复（需征得用户同意，是系统级故障恢复）
-  python assets/ssh-exec.py exec "systemctl restart astrbot"
+  python scripts/ssh-exec.py exec "systemctl restart astrbot"
   ```
 
 #### 2.3 插件并行 LLM 请求抢锁
@@ -132,11 +134,11 @@ python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "completion\|P
 - **修复**（用 `config-tool.py --plugin`，不要手写 `python3 -c` 改 JSON）：
   ```bash
   # 先用 ls 找插件配置文件名
-  python assets/ssh-exec.py exec "ls /opt/astrbot/data/plugin_configs/"
+  python scripts/ssh-exec.py exec "ls /opt/astrbot/data/plugin_configs/"
   # 降概率 + 切串行模式
-  python assets/config-tool.py --plugin <plugin_name> set proactive_emoji_probability 0.2
-  python assets/config-tool.py --plugin <plugin_name> set retrieval_mode on_decorating_result
-  python assets/astrbot-api.py plugins reload --name <plugin_name>
+  python scripts/config-tool.py --plugin <plugin_name> set proactive_emoji_probability 0.2
+  python scripts/config-tool.py --plugin <plugin_name> set retrieval_mode on_decorating_result
+  python scripts/astrbot-api.py plugins reload --name <plugin_name>
   ```
 
 #### 2.4 有 `completion` 但没 `Prepare to send` —— 回复被吞
@@ -147,8 +149,8 @@ python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "completion\|P
 #### 2.5 分群差异
 A 群正常 / B 群不回 → 对比两群日志：
 ```bash
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "unified_msg_origin=<群A>"
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "unified_msg_origin=<群B>"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "unified_msg_origin=<群A>"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "unified_msg_origin=<群B>"
 ```
 重点看 B 群是否有未退出的 agent runner / 长耗时 tool call / 特殊插件触发（`#生成图片` 等）。
 
@@ -163,13 +165,13 @@ python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "unified_msg_o
 
 ### 定位
 ```bash
-python assets/ssh-exec.py tail napcat --lines 300
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "websocket\|aiocqhttp\|405\|disconnect"
+python scripts/ssh-exec.py tail napcat --lines 300
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "websocket\|aiocqhttp\|405\|disconnect"
 # 看端口
-python assets/ssh-exec.py exec "ss -tlnp | grep -E '6185|6199|62125'"
+python scripts/ssh-exec.py exec "ss -tlnp | grep -E '6185|6199|62125'"
 # 看 AstrBot 的 aiocqhttp 配置
-python assets/config-tool.py get platform.0
-python assets/config-tool.py get platform.0.ws_reverse_port
+python scripts/config-tool.py get platform.0
+python scripts/config-tool.py get platform.0.ws_reverse_port
 ```
 
 ### 根因与修复
@@ -179,16 +181,16 @@ python assets/config-tool.py get platform.0.ws_reverse_port
 | NapCat 报 `Unexpected server response: 405` | 反向 WebSocket 地址缺 `/ws` 路径 | NapCat WebUI → 网络配置 → 反向 WebSocket 地址改为 `ws://127.0.0.1:{ws_reverse_port}/ws` |
 | NapCat 报连接拒绝 | AstrBot 没起 / ws_reverse_port 不对 / 防火墙 | `systemctl status astrbot`；`config-tool.py get platform.0.ws_reverse_port` |
 | webui.json 端口不生效（仍是 6099） | 文件有 UTF-8 BOM | `xxd ~/Napcat/.../webui.json \| head -1` 看首字节；用 `ssh-exec.py write` 重写无 BOM |
-| AstrBot 报 aiocqhttp 平台 disabled | `platform.0.enable=false` | `python assets/config-tool.py set platform.0.enable true` 然后 restart astrbot（影响核心生命周期，需用户确认） |
+| AstrBot 报 aiocqhttp 平台 disabled | `platform.0.enable=false` | `python scripts/config-tool.py set platform.0.enable true` 然后 restart astrbot（影响核心生命周期，需用户确认） |
 | 双方都启动但连不上 | NapCat 在另一台机器 / 端口绑定 127.0.0.1 | `platform.0.ws_reverse_host` 改 `0.0.0.0`；NapCat 反向地址写实际 IP |
 
 ### 验证连通
 重置后双方重启：
 ```bash
-python assets/ssh-exec.py exec "systemctl restart astrbot"
-python assets/ssh-exec.py exec "napcat restart <QQ号>"
+python scripts/ssh-exec.py exec "systemctl restart astrbot"
+python scripts/ssh-exec.py exec "napcat restart <QQ号>"
 # 30 秒后看日志
-python assets/ssh-exec.py log astrbot --since "30 sec ago" --grep "websocket\|connected"
+python scripts/ssh-exec.py log astrbot --since "30 sec ago" --grep "websocket\|connected"
 ```
 
 ---
@@ -202,11 +204,11 @@ python assets/ssh-exec.py log astrbot --since "30 sec ago" --grep "websocket\|co
 
 ### 定位
 ```bash
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "provider\|llm\|api key\|401\|403\|timeout"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "provider\|llm\|api key\|401\|403\|timeout"
 # 看 provider 配置
-python assets/config-tool.py get provider.0
-python assets/config-tool.py get provider.0.api_key
-python assets/config-tool.py get provider.0.type
+python scripts/config-tool.py get provider.0
+python scripts/config-tool.py get provider.0.api_key
+python scripts/config-tool.py get provider.0.type
 ```
 
 ### 根因与修复
@@ -230,12 +232,12 @@ python assets/config-tool.py get provider.0.type
 
 ### 定位
 ```bash
-python assets/ssh-exec.py exec "systemctl status astrbot --no-pager"
-python assets/ssh-exec.py log astrbot --since "10 min ago" --grep "json\|parse\|config"
+python scripts/ssh-exec.py exec "systemctl status astrbot --no-pager"
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --grep "json\|parse\|config"
 # 验证 JSON
-python assets/ssh-exec.py exec "python3 -c \"import json; json.load(open('/opt/astrbot/data/cmd_config.json'))\" || echo PARSE_FAIL"
+python scripts/ssh-exec.py exec "python3 -c \"import json; json.load(open('/opt/astrbot/data/cmd_config.json'))\" || echo PARSE_FAIL"
 # 查 BOM
-python assets/ssh-exec.py exec "xxd /opt/astrbot/data/cmd_config.json | head -1"
+python scripts/ssh-exec.py exec "xxd /opt/astrbot/data/cmd_config.json | head -1"
 ```
 
 ### 根因与修复
@@ -250,12 +252,12 @@ python assets/ssh-exec.py exec "xxd /opt/astrbot/data/cmd_config.json | head -1"
 ### 安全修改 JSON 的唯一姿势
 ```bash
 # 1. 先备份
-python assets/config-tool.py backup --local cmd_config.bak.json
+python scripts/config-tool.py backup --local cmd_config.bak.json
 # 2. 用 config-tool 改（parse→modify→dump，绝不 sed）
-python assets/config-tool.py set dashboard.port 62124
-python assets/config-tool.py patch '{"platform.0.enable":true,"platform.0.ws_reverse_port":6199}'
+python scripts/config-tool.py set dashboard.port 62124
+python scripts/config-tool.py patch '{"platform.0.enable":true,"platform.0.ws_reverse_port":6199}'
 # 3. 重启生效（核心配置变更，需用户确认）
-python assets/ssh-exec.py exec "systemctl restart astrbot"
+python scripts/ssh-exec.py exec "systemctl restart astrbot"
 ```
 
 > 案例：`references/troubleshooting.md` #15 详细记录了 sed 改 JSON 导致的崩溃循环。
@@ -271,11 +273,11 @@ python assets/ssh-exec.py exec "systemctl restart astrbot"
 
 ### 定位
 ```bash
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "wake\|prefix\|command\|is_wake"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "wake\|prefix\|command\|is_wake"
 # 看唤醒配置
-python assets/config-tool.py get wake_prefix
-python assets/config-tool.py get wake_prefix_blacklist
-python assets/config-tool.py get empty_mention_waiting
+python scripts/config-tool.py get wake_prefix
+python scripts/config-tool.py get wake_prefix_blacklist
+python scripts/config-tool.py get empty_mention_waiting
 ```
 
 ### 根因与修复
@@ -306,11 +308,11 @@ python assets/config-tool.py get empty_mention_waiting
 ### 定位
 ```bash
 # 看 WebUI 是否要求 API Key
-python assets/ssh-exec.py exec "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:6185/api/v1/im/bots"
+python scripts/ssh-exec.py exec "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:6185/api/v1/im/bots"
 # 带 Key 试
-python assets/ssh-exec.py exec "curl -s -w '%{http_code}' http://127.0.0.1:6185/api/v1/im/bots -H 'X-API-Key: YOUR_KEY'"
+python scripts/ssh-exec.py exec "curl -s -w '%{http_code}' http://127.0.0.1:6185/api/v1/im/bots -H 'X-API-Key: YOUR_KEY'"
 # 看 dashboard 配置
-python assets/config-tool.py get dashboard
+python scripts/config-tool.py get dashboard
 ```
 
 ### 根因与修复
@@ -324,11 +326,11 @@ python assets/config-tool.py get dashboard
 ### 用本 skill 的工具调 API
 ```bash
 # 列出机器人账号
-python assets/astrbot-api.py --api-key <key> bots
+python scripts/astrbot-api.py --api-key <key> bots
 # 重载插件
-python assets/astrbot-api.py --api-key <key> plugins reload --name <plugin>
+python scripts/astrbot-api.py --api-key <key> plugins reload --name <plugin>
 # 测试 chat
-python assets/astrbot-api.py --api-key <key> chat --session test --text "hello"
+python scripts/astrbot-api.py --api-key <key> chat --session test --text "hello"
 ```
 
 ---
@@ -343,13 +345,13 @@ python assets/astrbot-api.py --api-key <key> chat --session test --text "hello"
 
 ### 定位
 ```bash
-python assets/ssh-exec.py exec "top -bn1 | grep -E 'astrbot|python' | head -5"
-python assets/ssh-exec.py exec "ps auxf | grep astrbot | grep -v grep"
-python assets/ssh-exec.py exec "free -h"
+python scripts/ssh-exec.py exec "top -bn1 | grep -E 'astrbot|python' | head -5"
+python scripts/ssh-exec.py exec "ps auxf | grep astrbot | grep -v grep"
+python scripts/ssh-exec.py exec "free -h"
 # 长时间观察
-python assets/ssh-exec.py exec "vmstat 5 5"
+python scripts/ssh-exec.py exec "vmstat 5 5"
 # AstrBot 是否在积压
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "queue\|backlog\|slow"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "queue\|backlog\|slow"
 ```
 
 ### 根因与修复
@@ -397,8 +399,8 @@ async with aiohttp.ClientSession() as s:
 任何 AstrBot debug **优先一条命令开局**：
 
 ```bash
-python assets/ssh-exec.py diagnose        # 服务 + 端口 + 近 5 分钟 error
-python assets/ssh-exec.py diagnose --full # + napcat + 插件目录 + 配置摘要
+python scripts/ssh-exec.py diagnose        # 服务 + 端口 + 近 5 分钟 error
+python scripts/ssh-exec.py diagnose --full # + napcat + 插件目录 + 配置摘要
 ```
 
 等价于旧版手工三步（服务 / 端口 / error 日志），且**单连接**完成。

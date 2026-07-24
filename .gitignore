@@ -1,6 +1,25 @@
-# AstrBot 框架源码缓存（本地参考用，由 skill 运行时按需浅克隆）
+# AstrBot framework source cache (local reference; shallow-cloned on demand)
 /AstrBot/
+/cache/AstrBot/
+framework-cache.meta.json
 
-# Python 字节码缓存
+# Credentials — never commit
+login.config
+login.config.json
+login.config.*
+*.bak
+*.bak-*
+cmd_config.bak.json
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db

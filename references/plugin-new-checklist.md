@@ -58,7 +58,7 @@ AstrBot version examples:
 ## Optional Assets
 - logo.png in plugin root
 - 1:1 ratio, recommended 256x256
-- Use `assets/logo-process.py` to auto-convert any image to 256x256 centered-square PNG
+- Use `scripts/logo-process.py` to auto-convert any image to 256x256 centered-square PNG
 
 ## Config Schema (`_conf_schema.json`)
 可选，用于在 WebUI 渲染配置面板。支持的类型、`options` 下拉菜单语法、运行时读取流程等

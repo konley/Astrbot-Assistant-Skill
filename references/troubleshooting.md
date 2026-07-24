@@ -9,24 +9,14 @@
 
 **原因**：`astrbot init` 有交互式确认提示 `[Y/n]`。
 
-**解决**：使用 paramiko `invoke_shell()` + 自动检测并发送 `Y`。复用 `_common.py` 的 `connect`，不要重写连接逻辑：
+**解决**：不要手写 paramiko。复用 skill 封装：
 
-```python
-import sys; sys.path.insert(0, "assets")
-from _common import parse_login_config, connect
-
-creds = parse_login_config("login.config")
-c = connect(creds)
-try:
-    ch = c.invoke_shell()
-    import time; time.sleep(2)
-    ch.send("cd /opt/astrbot && astrbot init\n")
-    time.sleep(2)
-    ch.send("Y\n")
-    # 读取输出 ...
-finally:
-    c.close()
+```powershell
+$S = $env:ASTRBOT_SKILL_ROOT
+python -c "import sys; from pathlib import Path; sys.path.insert(0, str(Path(r'$S')/'scripts')); from _common import load_credentials, invoke_shell_send; print(invoke_shell_send(load_credentials(), ['cd /opt/astrbot && astrbot init', 'Y']))"
 ```
+
+仍失败再 `ssh-exec.py exec` / `diagnose` 查 unit 与日志；**禁止**新建临时 paramiko 脚本。
 
 ## 2. PowerShell 传递含特殊字符的远程命令失败
 
@@ -81,11 +71,11 @@ def _strip_markdown(self, text: str) -> str:
 **解决**：
 ```bash
 # 查找占用进程
-python assets/ssh-exec.py exec "ss -tlnp | grep {端口}"
+python scripts/ssh-exec.py exec "ss -tlnp | grep {端口}"
 # 或
-python assets/ssh-exec.py exec "lsof -i:{端口}"
+python scripts/ssh-exec.py exec "lsof -i:{端口}"
 # 停止占用进程
-python assets/ssh-exec.py exec "kill {PID}"
+python scripts/ssh-exec.py exec "kill {PID}"
 ```
 
 ## 6. metadata.yaml 的 astrbot_version 格式错误

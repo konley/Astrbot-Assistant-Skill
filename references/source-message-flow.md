@@ -1,5 +1,7 @@
 # AstrBot 消息流源码精华
 
+> **使用前：先** `python scripts/ssh-exec.py framework check` **对齐版本**。本文是符号/机制索引，行号可能漂移；以对齐后的 `./AstrBot/` 与远端 runtime 为准。
+
 按需加载此文件：当需要理解一条消息从接收到回复经过哪些阶段、对应哪些源码、打哪些日志时使用。
 配合 `references/debug-handbook.md` §2（机器人不回复）一起看。
 
@@ -61,10 +63,10 @@ def _check_wake(self, event: AstrMessageEvent) -> bool:
 
 ```bash
 # 看唤醒是否通过
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "DIRECTED AT YOU"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "DIRECTED AT YOU"
 # 看唤醒配置
-python assets/config-tool.py get wake_prefix
-python assets/config-tool.py get empty_mention_waiting
+python scripts/config-tool.py get wake_prefix
+python scripts/config-tool.py get empty_mention_waiting
 ```
 
 ## 3. 指令分发（command / regex / hook）
@@ -119,7 +121,7 @@ class SessionLock:
 
 ```bash
 # 查时序是否完整
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "ready to request\|acquired session lock\|completion\|Prepare to send"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "ready to request\|acquired session lock\|completion\|Prepare to send"
 ```
 
 ### MiniMax 推理泄漏特殊性
@@ -141,7 +143,7 @@ python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "ready to requ
 
 ```bash
 # 查一条具体消息从收到到发送的全过程
-python assets/ssh-exec.py log astrbot --since "10 min ago" --grep "unified_msg_origin=<群ID>"
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --grep "unified_msg_origin=<群ID>"
 # 上面命令会把该群所有 stage 日志串起来，便于看卡在哪步
 ```
 
@@ -159,5 +161,5 @@ python assets/ssh-exec.py log astrbot --since "10 min ago" --grep "unified_msg_o
 
 要读取具体源码（在不确定某个判定时）：
 ```bash
-python assets/ssh-exec.py exec "grep -n 'isinstance.*At' /opt/astrbot/.venv/lib/python*/site-packages/astrbot/core/pipeline/waking_check/stage.py 2>/dev/null || find / -path '*/astrbot/core/pipeline/waking_check/stage.py' 2>/dev/null | head -1 | xargs grep -n 'isinstance.*At'"
+python scripts/ssh-exec.py exec "grep -n 'isinstance.*At' /opt/astrbot/.venv/lib/python*/site-packages/astrbot/core/pipeline/waking_check/stage.py 2>/dev/null || find / -path '*/astrbot/core/pipeline/waking_check/stage.py' 2>/dev/null | head -1 | xargs grep -n 'isinstance.*At'"
 ```

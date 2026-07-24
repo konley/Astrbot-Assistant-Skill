@@ -1,10 +1,10 @@
 # AstrBot 插件合规检查与开发工作流
 
-涵盖从自然语言需求解析到交付合规的完整流程。生成新插件时配合 `assets/plugin-scaffold.py`
+涵盖从自然语言需求解析到交付合规的完整流程。生成新插件时配合 `scripts/plugin-scaffold.py`
 与 `references/plugin-new-checklist.md` 一起看。
 
 > **流程门禁（身份 / logo / 仓库 / push / version）以 `references/plugin-dev-playbook.md` 为准。**
-> 可执行检查：`python assets/plugin-check.py <dir>`；push 前：`python assets/git-identity.py check-push`。
+> 可执行检查：`python scripts/plugin-check.py <dir>`；push 前：`python scripts/git-identity.py check-push`。
 
 ## 1. 需求解析工作流（from natural language）
 

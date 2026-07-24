@@ -1,5 +1,7 @@
 # AstrBot 插件内部源码精华
 
+> **使用前：先** `python scripts/ssh-exec.py framework check` **对齐版本**。本文是符号/机制索引，行号可能漂移；以对齐后的 `./AstrBot/` 与远端 runtime 为准。
+
 按需加载此文件：当需要理解插件加载/重载/卸载/注册的内部机制时使用。配合
 `references/plugin-lifecycle.md`（操作 SOP）和 `references/debug-handbook.md` §1（加载失败）一起看。
 
@@ -182,6 +184,6 @@ uninstall(plugin_name, delete_config=False, delete_data=False):
 
 要 SSH 查具体源码：
 ```bash
-python assets/ssh-exec.py exec "find / -path '*/astrbot/core/star/star_manager.py' 2>/dev/null | head -1 | xargs grep -n 'def reload'"
-python assets/ssh-exec.py exec "find / -path '*/astrbot/api/star/__init__.py' 2>/dev/null | head -1 | xargs cat"
+python scripts/ssh-exec.py exec "find / -path '*/astrbot/core/star/star_manager.py' 2>/dev/null | head -1 | xargs grep -n 'def reload'"
+python scripts/ssh-exec.py exec "find / -path '*/astrbot/api/star/__init__.py' 2>/dev/null | head -1 | xargs cat"
 ```

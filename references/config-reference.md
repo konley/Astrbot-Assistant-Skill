@@ -162,7 +162,9 @@ api_key =
 | `[ssh].host` | 是 | SSH 主机 |
 | `[ssh].port` | 否（默认 22） | SSH 端口 |
 | `[ssh].user` | 是 | SSH 用户名 |
-| `[ssh].password` | 是 | SSH 密码 |
+| `[ssh].password` | 条件必填 | SSH 密码；与 identity_file/allow_agent 至少一种 |
+| `[ssh].identity_file` | 条件必填 | 私钥路径；也可用 `ASTRBOT_SSH_IDENTITY` |
+| `[ssh].allow_agent` | 否 | 是否使用 ssh-agent；或 `ASTRBOT_SSH_ALLOW_AGENT=1` |
 | `[git].user` | 插件推荐 | metadata `author` + git `user.name`（个人） |
 | `[git].email` | 插件推荐 | git `user.email`（个人） |
 | `[git].github` | 插件推荐 | `metadata.repo` 根 |
@@ -170,8 +172,8 @@ api_key =
 | `[dashboard].api_key` | 否 | Dashboard API Key（`X-API-Key`；WebUI 创建） |
 | 旧版 `[git.personal]` / multi-profile | 兼容 | 仍可解析，**新配置请用扁平 [git]** |
 
-插件身份工具：`python assets/git-identity.py show|status|fix|check-push`  
-插件合规：`python assets/plugin-check.py <dir>`  
+插件身份工具：`python scripts/git-identity.py show|status|fix|check-push`  
+插件合规：`python scripts/plugin-check.py <dir>`  
 详见 `references/plugin-dev-playbook.md`。
 
 #### 2) JSON（可选）
@@ -204,9 +206,9 @@ git_email:you@example.com
 #### 自动生成模板
 
 - 缺失时：`load_credentials()` 会在首选项目路径生成带注释的 INI 模板，并提示填写
-- 手动：`python assets/ssh-exec.py init-config [--format ini|json] [--path PATH] [--force]`
+- 手动：`python scripts/ssh-exec.py init-config [--format ini|json] [--path PATH] [--force]`
 
-解析实现：`assets/_common.py` 的 `parse_login_config`（**唯一实现**，自动识别格式）。
+解析实现：`scripts/_common.py` 的 `parse_login_config`（**唯一实现**，自动识别格式）。
 
 搜索顺序：`--login-config` → `$ASTRBOT_LOGIN_CONFIG` → cwd 向上 → skill 根向上（同时找 `login.config` 与 `login.config.json`）。
 
@@ -219,14 +221,14 @@ creds = load_credentials()  # or parse_login_config(Path("login.config"))
 ### 远程操作首选 CLI
 
 ```bash
-python assets/ssh-exec.py whoami
-python assets/ssh-exec.py diagnose --full
-python assets/ssh-exec.py trace --since "30 min ago"
-python assets/ssh-exec.py batch "cmd1" "cmd2"
-python assets/ssh-exec.py log astrbot --since "30 min ago" --profile errors
-python assets/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
-python assets/config-tool.py get dashboard.port
-python assets/astrbot-api.py --via-ssh plugins reload --name my_plugin
+python scripts/ssh-exec.py whoami
+python scripts/ssh-exec.py diagnose --full
+python scripts/ssh-exec.py trace --since "30 min ago"
+python scripts/ssh-exec.py batch "cmd1" "cmd2"
+python scripts/ssh-exec.py log astrbot --since "30 min ago" --profile errors
+python scripts/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
+python scripts/config-tool.py get dashboard.port
+python scripts/astrbot-api.py --via-ssh plugins reload --name my_plugin
 ```
 
 ### paramiko 片段（仅 invoke_shell 交互式场景）
@@ -245,3 +247,22 @@ print(invoke_shell_send(creds, ["cd /opt/astrbot", "astrbot init", "Y"]))
 - 过滤在远端完成；PowerShell 下给 `exec`/`batch` 的命令用引号包住
 - 长内容用 `write --file` / `upload` / `sync-plugin`，避免 argv 与 BOM
 - 禁止为一次性任务新建 paramiko 运维脚本
+
+
+## [paths] 远端布局（可选）
+
+用于非 `/opt/astrbot` 安装或自定义 systemd 单元名。未写则使用默认。
+
+| 键 | 默认 | 说明 |
+|----|------|------|
+| `astrbot_root` | `/opt/astrbot` | 安装根 |
+| `data_dir` | `{root}/data` | 数据目录 |
+| `plugins_dir` | `{data}/addons/plugins` | 插件安装目录 |
+| `plugin_configs_dir` | `{data}/plugin_configs` | 插件配置 |
+| `plugin_data_dir` | `{data}/plugin_data` | 插件持久化 |
+| `cmd_config` | `{data}/cmd_config.json` | 主配置 |
+| `astrbot_unit` | `astrbot` | systemd 单元名 |
+| `python_bin` | optional remote python for version probe (uv tool interpreter) |
+| `napcat_unit` | _(空)_ | 可选 |
+
+`config-tool` / `sync-plugin` / `service` / `diagnose` 会读取该段。

@@ -1,6 +1,6 @@
 # OpenAPI / WebUI 集成
 
-权威命令以 `python assets/astrbot-api.py --help` 为准。
+权威命令以 `python scripts/astrbot-api.py --help` 为准。
 
 ## 这个 key 是干什么的？
 
@@ -50,12 +50,12 @@ api_key = abk_你的key
 
 ```bash
 # 推荐：key/port 写在 login.config 后
-python assets/astrbot-api.py --via-ssh plugins list
-python assets/astrbot-api.py --via-ssh plugins reload --name my_plugin
-python assets/astrbot-api.py --via-ssh bots
-python assets/astrbot-api.py --via-ssh config get
-python assets/astrbot-api.py --via-ssh chat --session test --text "hello"
-python assets/astrbot-api.py --via-ssh raw --method GET --path /api/v1/plugins
+python scripts/astrbot-api.py --via-ssh plugins list
+python scripts/astrbot-api.py --via-ssh plugins reload --name my_plugin
+python scripts/astrbot-api.py --via-ssh bots
+python scripts/astrbot-api.py --via-ssh config get
+python scripts/astrbot-api.py --via-ssh chat --session test --text "hello"
+python scripts/astrbot-api.py --via-ssh raw --method GET --path /api/v1/plugins
 ```
 
 ## 端点族
@@ -68,7 +68,7 @@ python assets/astrbot-api.py --via-ssh raw --method GET --path /api/v1/plugins
 ## 与插件同步闭环
 
 ```bash
-python assets/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
-python assets/astrbot-api.py --via-ssh plugins reload --name my_plugin
-python assets/ssh-exec.py log astrbot --since "2 min ago" --profile plugin
+python scripts/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
+python scripts/astrbot-api.py --via-ssh plugins reload --name my_plugin
+python scripts/ssh-exec.py log astrbot --since "2 min ago" --profile plugin
 ```

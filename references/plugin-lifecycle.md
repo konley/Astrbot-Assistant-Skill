@@ -122,8 +122,8 @@
 
 ```bash
 # 确认 astrbot 工作目录
-python assets/ssh-exec.py exec "cat /etc/systemd/system/astrbot.service | grep -E 'WorkingDirectory|ExecStart'"
+python scripts/ssh-exec.py exec "cat /etc/systemd/system/astrbot.service | grep -E 'WorkingDirectory|ExecStart'"
 # 兜底查找（用户自定义了路径时）
-python assets/ssh-exec.py exec "find / -path '*/data/addons/plugins' -type d 2>/dev/null | head -5"
-python assets/ssh-exec.py exec "ls /opt/astrbot/data/addons/plugins/"
+python scripts/ssh-exec.py exec "find / -path '*/data/addons/plugins' -type d 2>/dev/null | head -5"
+python scripts/ssh-exec.py exec "ls /opt/astrbot/data/addons/plugins/"
 ```

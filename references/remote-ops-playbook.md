@@ -1,6 +1,6 @@
 # Remote Ops Playbook（Windows 本机 → SSH 远端）
 
-**唯一远程作战手册。** 排障/同步/API 先读本文，再按需打开 `debug-handbook.md`。
+**唯一远程作战手册。** 全局硬约束见 `SKILL.md`「硬约束」清单（此处不重复展开）。 排障/同步/API 先读本文，再按需打开 `debug-handbook.md`。
 
 ## 0. 硬契约（违反即浪费 token）
 
@@ -10,24 +10,28 @@
 4. 改 JSON → `config-tool.py`（禁止 sed / 手工拼 JSON 字符串写回）。
 5. 长文件内容 → `write --file` / `upload` / `upload-dir` / `sync-plugin`（禁止 `write` 内联大段 argv）。
 6. 本地有插件源码 → 本地 `read`/`edit`，再用 `sync-plugin` 同步；不要远程 cat 改业务代码。
-7. 调用时优先用 **skill 内 assets 的绝对路径**，避免 cwd 漂移。
+7. 调用时优先用 **skill 内 scripts 的绝对路径**，避免 cwd 漂移。
 
 ### 推荐调用模板（PowerShell）
 
 ```powershell
-$SKILL = "C:\测试开发\AstrBot\Astrbot-Assistant-Skill"   # 或 Junction 目标
-$A = Join-Path $SKILL "assets"
-# 可选：固定凭据文件
-# $env:ASTRBOT_LOGIN_CONFIG = "C:\测试开发\AstrBot\login.config"
+# 将 skill 根设为环境变量（推荐），避免写死本机路径
+$env:ASTRBOT_SKILL_ROOT = "<path-to>/Astrbot-Assistant-Skill"
+# $env:ASTRBOT_LOGIN_CONFIG = "<path-to>/login.config"
+$S = $env:ASTRBOT_SKILL_ROOT
+$A = Join-Path $S "scripts"
 
 python "$A\ssh-exec.py" whoami
 python "$A\ssh-exec.py" diagnose --full
+python "$A\ssh-exec.py" framework check
 python "$A\ssh-exec.py" trace --since "30 min ago"
+python "$A\ssh-exec.py" service status
+python "$A\ssh-exec.py" tunnel print --forward dashboard=6185:6185
 python "$A\config-tool.py" get platform.0
-python "$A\astrbot-api.py" --via-ssh --dash-port 6185 plugins list
+python "$A\astrbot-api.py" --via-ssh plugins list
 ```
 
-> 首次使用：`python assets/ssh-exec.py init-config` 生成带注释 INI 模板（也支持 `--format json`）。
+> 首次使用：`python scripts/ssh-exec.py init-config` 生成带注释 INI 模板（也支持 `--format json`）。
 > `login.config` 搜索顺序：`--login-config` → `$ASTRBOT_LOGIN_CONFIG` → cwd 向上 → skill 根向上。  
 > 失败时 stderr 会打印 **Searched:** 列表，不要猜 host。
 

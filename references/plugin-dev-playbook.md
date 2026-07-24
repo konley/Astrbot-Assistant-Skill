@@ -14,7 +14,7 @@
 | `ssh-exec.py sync-plugin` | 本地 → 远端插件目录同步 |
 | `astrbot-api.py --via-ssh` | 远端 plugins install/reload/list |
 
-路径一律优先 **assets 绝对路径**。
+路径一律优先 **scripts 绝对路径**（`$env:ASTRBOT_SKILL_ROOT\scripts\...`）。
 
 ---
 
@@ -25,21 +25,35 @@
 ```ini
 [git]
 # 个人身份（唯一默认）。不要填公司账号。
-user = konley
+user = yourname
 email = you@example.com
-github = https://github.com/konley
+github = https://github.com/yourname
 ```
 
 2. **不提供「公司 profile」工作流**。多 profile 解析代码可兼容旧文件，但 UX/模板/本手册一律只教扁平个人身份。
 3. **push 前门禁**：
 
 ```bash
-python assets/git-identity.py check-push --repo <plugin_dir>
+python scripts/git-identity.py check-push --repo <plugin_dir>
 # 失败 → 锁定 local（从不改 global）
-python assets/git-identity.py fix --repo <plugin_dir>
+python scripts/git-identity.py fix --repo <plugin_dir>
 ```
 
 4. 禁止：静默用 global 公司账号推个人插件；禁止在文档里引导用户填写公司账号。
+
+---
+
+## 1.5 框架版本门禁（写依赖 API 前）
+
+依赖 AstrBot 框架符号 / 查 `./AstrBot/` 源码前：
+
+```bash
+python scripts/ssh-exec.py framework check
+# mismatch / local_missing → 征得用户同意后：
+python scripts/ssh-exec.py framework sync --yes
+```
+
+详见 `source-version-align.md`。**禁止**在版本未知或 mismatch 时凭本地缓存 invent API。
 
 ---
 
@@ -57,7 +71,7 @@ python assets/git-identity.py fix --repo <plugin_dir>
 ### 2.2 生成骨架
 
 ```bash
-python assets/plugin-scaffold.py \
+python scripts/plugin-scaffold.py \
   --name astrbot_plugin_example \
   --desc "一句话描述" \
   --from-login-config \
@@ -68,15 +82,15 @@ python assets/plugin-scaffold.py \
 ### 2.3 写业务 + 合规检查
 
 ```bash
-python assets/plugin-check.py ./astrbot_plugin_example
+python scripts/plugin-check.py ./astrbot_plugin_example
 # 无 FAIL 才能交付；logo 缺失通常是 WARN
 ```
 
 ### 2.4 本地迭代部署（未发布）
 
 ```bash
-python assets/ssh-exec.py sync-plugin ./astrbot_plugin_example --name astrbot_plugin_example
-python assets/astrbot-api.py --via-ssh plugins reload --name astrbot_plugin_example
+python scripts/ssh-exec.py sync-plugin ./astrbot_plugin_example --name astrbot_plugin_example
+python scripts/astrbot-api.py --via-ssh plugins reload --name astrbot_plugin_example
 ```
 
 ### 2.5 首次 git 身份锁定
@@ -84,8 +98,8 @@ python assets/astrbot-api.py --via-ssh plugins reload --name astrbot_plugin_exam
 ```bash
 cd astrbot_plugin_example
 git init   # 若尚未
-python ../Astrbot-Assistant-Skill/assets/git-identity.py fix --repo .
-python ../Astrbot-Assistant-Skill/assets/git-identity.py check-push --repo .
+python ../Astrbot-Assistant-Skill/scripts/git-identity.py fix --repo .
+python ../Astrbot-Assistant-Skill/scripts/git-identity.py check-push --repo .
 ```
 
 ---
@@ -108,8 +122,8 @@ python ../Astrbot-Assistant-Skill/assets/git-identity.py check-push --repo .
 | 首次交付 | 0.1.0 | logo、repo、tests 走门禁 |
 
 ```bash
-python assets/plugin-check.py <dir>
-python assets/plugin-check.py <dir> --bump patch   # 需要时
+python scripts/plugin-check.py <dir>
+python scripts/plugin-check.py <dir> --bump patch   # 需要时
 ```
 
 `plugin-check --bump` 会同步改 `metadata.yaml` 的 `version` 与 `main.py` 里 `@register(..., version=...)`（能匹配到时）。
@@ -126,10 +140,10 @@ python assets/plugin-check.py <dir> --bump patch   # 需要时
 - [ ] 用户知道如何 reload
 
 ```bash
-python assets/git-identity.py show
-python assets/git-identity.py status --repo .
-python assets/git-identity.py fix --repo .
-python assets/git-identity.py check-push --repo .
+python scripts/git-identity.py show
+python scripts/git-identity.py status --repo .
+python scripts/git-identity.py fix --repo .
+python scripts/git-identity.py check-push --repo .
 ```
 
 ---
