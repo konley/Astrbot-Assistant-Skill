@@ -87,6 +87,9 @@ class Credentials:
     git_email: str = ""   # active profile email (compat)
     git_default: str = "personal"
     git_profiles: dict = field(default_factory=dict)  # name -> GitProfile
+    # Optional Dashboard / OpenAPI settings (astrbot-api.py)
+    dashboard_port: int | None = None
+    dashboard_api_key: str = ""
 
     def __str__(self) -> str:
         return f"{self.username}@{self.host}:{self.port}"
@@ -220,10 +223,12 @@ _PLACEHOLDER_VALUES = {
     "",
     "your_password_here",
     "your_ssh_password",
+    "your_dashboard_api_key_here",
     "change_me",
     "changeme",
     "<password>",
     "<your_password>",
+    "<api_key>",
     "xxx",
     "TODO",
     "todo",
@@ -235,13 +240,16 @@ LOGIN_CONFIG_INI_TEMPLATE = """\
 # Encoding: UTF-8 without BOM
 # DO NOT commit this file to git.
 #
-# [ssh]  required for remote ops
-# [git]  personal identity ONLY — plugin author / commit / push 唯一来源
-#        目的：避免被本机 global 公司 git 账号误 push
+# [ssh]       required for remote ops
+# [git]       personal identity ONLY — plugin author / commit / push 唯一来源
+#             目的：避免被本机 global 公司 git 账号误 push
+# [dashboard] optional — astrbot-api.py WebUI/OpenAPI（端口常非默认）
+#             API key 在 WebUI「设置 → API Keys」创建，不是 cmd_config 字段
 #
 # Verify SSH:  python assets/ssh-exec.py whoami
 # Verify git:  python assets/git-identity.py show
 # Pre-push:    python assets/git-identity.py check-push --repo <plugin_dir>
+# API smoke:   python assets/astrbot-api.py --via-ssh plugins list
 # =============================================================================
 
 [ssh]
@@ -257,6 +265,14 @@ user = yourname
 email = you@example.com
 # GitHub 账号/组织根 URL（用于 metadata.yaml repo 字段）
 github = https://github.com/yourname
+
+[dashboard]
+# Optional. Used by astrbot-api.py (X-API-Key + remote port)
+# Get key: WebUI → 设置 → API Keys → 创建（前缀通常 abk_...）
+# Priority: --api-key / --dash-port > env > this file
+# 你的实例若不在 6185，请改 port（例如 62124）
+port = 6185
+api_key =
 """
 
 LOGIN_CONFIG_JSON_TEMPLATE = """\
@@ -271,6 +287,10 @@ LOGIN_CONFIG_JSON_TEMPLATE = """\
     "user": "yourname",
     "email": "you@example.com",
     "github": "https://github.com/yourname"
+  },
+  "dashboard": {
+    "port": 6185,
+    "api_key": ""
   }
 }
 """
@@ -455,6 +475,8 @@ def _creds_from_fields(
     source: str = "",
     git_default: str = "personal",
     git_profiles: dict | None = None,
+    dashboard_port: int | None = None,
+    dashboard_api_key: str = "",
 ) -> Credentials:
     host = (host or "").strip()
     user = (user or "").strip()
@@ -502,6 +524,17 @@ def _creds_from_fields(
     active = profiles.get(dname) or (
         next(iter(profiles.values())) if profiles else GitProfile(name=dname)
     )
+    dash_key = (dashboard_api_key or "").strip()
+    if _is_placeholder(dash_key):
+        dash_key = ""
+    dash_port = dashboard_port
+    if dash_port is not None:
+        try:
+            dash_port = int(dash_port)
+        except (TypeError, ValueError) as e:
+            raise SshConfigError(
+                f"invalid dashboard.port in {source or '(unknown)'}: {dashboard_port!r}"
+            ) from e
     return Credentials(
         host=host,
         port=int(port or 22),
@@ -513,6 +546,8 @@ def _creds_from_fields(
         git_email=active.email or (git_email or "").strip(),
         git_default=dname,
         git_profiles=profiles,
+        dashboard_port=dash_port,
+        dashboard_api_key=dash_key,
     )
 
 
@@ -525,6 +560,7 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
 
     ssh_sec = None
     git_sec = None
+    dash_sec = None
     profile_secs: dict[str, str] = {}  # profile_name -> section name
     for name in cp.sections():
         low = name.lower()
@@ -536,6 +572,8 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
             profile_secs[low.split(".", 1)[1]] = name
         elif low in ("github", "vcs"):
             git_sec = git_sec or name
+        elif low in ("dashboard", "webui", "openapi", "api"):
+            dash_sec = name
 
     if ssh_sec is None:
         raise SshConfigError(
@@ -604,6 +642,25 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
         next(iter(profiles.values())) if profiles else GitProfile(name=git_default)
     )
 
+    dash_port_s = g(dash_sec, "port", "dash_port", "dashboard_port", default="")
+    dash_key = g(
+        dash_sec,
+        "api_key",
+        "apikey",
+        "key",
+        "token",
+        "dashboard_api_key",
+        default="",
+    )
+    dash_port: int | None = None
+    if dash_port_s:
+        try:
+            dash_port = int(dash_port_s)
+        except ValueError as e:
+            raise SshConfigError(
+                f"invalid dashboard.port in {path}: {dash_port_s!r}"
+            ) from e
+
     return _creds_from_fields(
         host=host,
         port=port,
@@ -615,6 +672,8 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
         source=str(path),
         git_default=git_default,
         git_profiles=profiles,
+        dashboard_port=dash_port,
+        dashboard_api_key=dash_key,
     )
 
 
@@ -671,6 +730,27 @@ def _parse_login_json(text: str, path: Path) -> Credentials:
         next(iter(profiles.values())) if profiles else GitProfile(name=git_default)
     )
 
+    dash = data.get("dashboard") or data.get("webui") or data.get("openapi") or {}
+    if not isinstance(dash, dict):
+        dash = {}
+    dash_port_raw = dash.get("port", dash.get("dash_port"))
+    dash_port: int | None = None
+    if dash_port_raw not in (None, ""):
+        try:
+            dash_port = int(dash_port_raw)
+        except (TypeError, ValueError) as e:
+            raise SshConfigError(
+                f"invalid dashboard.port in {path}: {dash_port_raw!r}"
+            ) from e
+    dash_key = str(
+        dash.get("api_key")
+        or dash.get("apikey")
+        or dash.get("key")
+        or dash.get("token")
+        or data.get("api_key")
+        or ""
+    )
+
     return _creds_from_fields(
         host=host,
         port=port_i,
@@ -682,6 +762,8 @@ def _parse_login_json(text: str, path: Path) -> Credentials:
         source=str(path),
         git_default=git_default,
         git_profiles=profiles,
+        dashboard_port=dash_port,
+        dashboard_api_key=dash_key,
     )
 
 
@@ -795,10 +877,15 @@ def parse_login_config(path: Path) -> Credentials:
             email = you@example.com
             github = https://github.com/you
 
+            [dashboard]
+            port = 6185
+            api_key = abk_...
+
       - JSON::
 
             {"ssh":{"host":"...","port":22,"user":"...","password":"..."},
-             "git":{"user":"...","email":"...","github":"..."}}
+             "git":{"user":"...","email":"...","github":"..."},
+             "dashboard":{"port":6185,"api_key":"abk_..."}}
 
       - Legacy line-based (still supported).
     """

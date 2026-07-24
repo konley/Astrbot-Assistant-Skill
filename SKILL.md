@@ -121,7 +121,7 @@ upload|download|cat|ls|exec
 
 ## login.config 凭据
 
-**标准格式：INI**（推荐，可写注释）。也支持 JSON（`login.config.json` 或 `{...}`），旧行位序格式仍兼容。解析唯一实现：`assets/_common.py` 的 `parse_login_config`。
+**标准格式：INI**（推荐，可写注释；含可选 `[dashboard] port/api_key` 供 `astrbot-api`）。也支持 JSON（`login.config.json` 或 `{...}`），旧行位序格式仍兼容。解析唯一实现：`assets/_common.py` 的 `parse_login_config`。
 
 ```ini
 [ssh]

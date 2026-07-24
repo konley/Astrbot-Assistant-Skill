@@ -318,8 +318,8 @@ python assets/config-tool.py get dashboard
 | 症状 | 原因 | 修复 |
 |------|------|------|
 | `401 Unauthorized` | 缺 `X-API-Key` 头 | 请求加 `-H "X-API-Key: <key>"`；用 `astrbot-api.py --api-key <key> ...` |
-| `403 Forbidden` | Key 错 / 无权限 | WebUI → 设置 → 重新生成 API Key；`config-tool.py set dashboard.api_key <new>` |
-| 工具脚本一直 401 | Key 没设到环境变量 | `setx ASTRBOT_API_KEY "<key>"`（Windows）或写到 shell rc |
+| `403 Forbidden` | Key 错 / 无权限 | WebUI → 设置 → 重新生成 API Key；WebUI → API Keys 重新创建；写入 `login.config [dashboard].api_key` 或 `$ASTRBOT_API_KEY` |
+| 工具脚本一直 401 | Key 未配置 | 写入 `login.config [dashboard].api_key` 或 `$ASTRBOT_API_KEY`；端口用 `[dashboard].port` |
 
 ### 用本 skill 的工具调 API
 ```bash

@@ -160,6 +160,8 @@ github = https://github.com/yourname
 | `[git].user` | 插件推荐 | metadata `author` + git `user.name`（个人） |
 | `[git].email` | 插件推荐 | git `user.email`（个人） |
 | `[git].github` | 插件推荐 | `metadata.repo` 根 |
+| `[dashboard].port` | 否 | 远程 WebUI 端口（`astrbot-api --via-ssh`；常非 6185） |
+| `[dashboard].api_key` | 否 | Dashboard API Key（`X-API-Key`；WebUI 创建） |
 | 旧版 `[git.personal]` / multi-profile | 兼容 | 仍可解析，**新配置请用扁平 [git]** |
 
 插件身份工具：`python assets/git-identity.py show|status|fix|check-push`  
@@ -177,7 +179,8 @@ github = https://github.com/yourname
     "user": "yourname",
     "email": "you@example.com",
     "github": "https://github.com/yourname"
-  }
+  },
+  "dashboard": { "port": 6185, "api_key": "" }
 }
 ```
 

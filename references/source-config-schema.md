@@ -29,7 +29,7 @@
 | 字段 | 类型 | 默认 | 说明 |
 |------|------|------|------|
 | `port` | int | 6185 | WebUI 端口 |
-| `api_key` | string | "" | OpenAPI / WebUI API 的 X-API-Key 鉴权 |
+| `api_key` | string | "" | **已过时/勿依赖**：现行 API Key 在 WebUI「API Keys」数据库；skill 请写 `login.config [dashboard].api_key` |
 | `username` | string | "" | WebUI 登录用户名 |
 | `password` | string | "" | WebUI 登录密码 |
 
