@@ -1,13 +1,9 @@
-# Example local workflow
-# 1) Clone AstrBot
-git clone https://github.com/AstrBotDevs/AstrBot
-
-# 2) Enter plugin directory (NOTE: data/addons/plugins/, not data/plugins/)
-mkdir -p AstrBot/data/addons/plugins
-cd AstrBot/data/addons/plugins
-
-# 3) Clone your plugin repository
-git clone <your_plugin_repo_url>
-
-# Then open AstrBot in VS Code and debug from runtime.
-# Use WebUI plugin management to reload plugin after edits.
+# AstrBot skill - high frequency remote commands (see remote-ops-playbook.md)
+python assets/ssh-exec.py whoami
+python assets/ssh-exec.py diagnose --full
+python assets/ssh-exec.py trace --since "30 min ago"
+python assets/ssh-exec.py log astrbot --since "30 min ago" --profile errors
+python assets/ssh-exec.py batch "systemctl is-active astrbot" "ss -tlnp | head"
+python assets/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
+python assets/config-tool.py get platform.0
+python assets/astrbot-api.py --via-ssh plugins reload --name my_plugin

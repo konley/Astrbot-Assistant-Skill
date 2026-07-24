@@ -54,6 +54,7 @@ from _common import (  # noqa: E402
     Credentials,
     SshConfigError,
     SshExecError,
+    _strip_bom,
     download_file,
     load_credentials,
     read_file,
@@ -156,12 +157,20 @@ def coerce(raw: str):
     return raw
 
 
+
+def _configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
 def _load_remote(creds: Credentials, remote_path: str) -> dict:
-    text = read_file(creds, remote_path)
+    text = _strip_bom(read_file(creds, remote_path))
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
@@ -326,4 +335,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    _configure_stdio()
     sys.exit(main())

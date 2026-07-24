@@ -34,7 +34,7 @@ AstrBot 全流程助手 Skill，覆盖从零部署到日常运维、从插件开
 │   ├── source-config-schema.md           # 配置 schema 权威详解
 │   ├── deploy-guide.md                   # AstrBot + NapCat 部署指南
 │   ├── troubleshooting.md                # 边缘案例排障
-│   ├── config-reference.md               # 配置文件/路径/login.config 权威表
+│   ├── config-reference.md               # 配置文件/路径/login.config（标准 INI / 可选 JSON） 权威表
 │   ├── plugin-lifecycle.md               # 插件生命周期 SOP
 │   ├── plugin-new-checklist.md           # 新插件官方检查清单
 │   └── compliance-checklist.md           # 合规检查 + 需求解析 + 测试
@@ -43,7 +43,7 @@ AstrBot 全流程助手 Skill，覆盖从零部署到日常运维、从插件开
     ├── ssh-exec.py                       # SSH/SFTP/查日志 CLI
     ├── astrbot-api.py                    # WebUI/OpenAPI HTTP CLI
     ├── config-tool.py                    # cmd_config.json 读写 CLI
-    ├── plugin-scaffold.py                # 插件骨架生成器
+    ├── plugin-scaffold / plugin-check / git-identity.py                # 插件骨架生成器
     ├── logo-process.py                   # Logo 自动处理
     ├── tunnel-generator.html             # SSH 隧道生成器
     ├── metadata.yaml.template            # 插件 metadata 模板
@@ -67,3 +67,7 @@ AstrBot 全流程助手 Skill，覆盖从零部署到日常运维、从插件开
 ## License
 
 MIT
+
+## Remote ops
+
+See `references/remote-ops-playbook.md` and `python assets/ssh-exec.py -h`.

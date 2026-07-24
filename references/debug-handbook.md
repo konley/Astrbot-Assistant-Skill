@@ -7,22 +7,37 @@
 
 ## 0. 一键命令小抄
 
+> 完整远程契约与 Windows 调用见 `references/remote-ops-playbook.md`。
+> 所有过滤在**远端**完成；不要 `findstr` 二次管道。`--grep` 只接受一个 pattern 参数（不要写 `--grep -i`）。
+
 ```bash
-# AstrBot 最近 200 行日志
+# 开局 / 身份
+python assets/ssh-exec.py whoami
+python assets/ssh-exec.py diagnose
+python assets/ssh-exec.py diagnose --full
+
+# 不回复：消息流五步（单连接）
+python assets/ssh-exec.py trace --since "30 min ago"
+
+# 日志（profile 优先）
+python assets/ssh-exec.py log astrbot --since "30 min ago" --profile errors
+python assets/ssh-exec.py log astrbot --since "30 min ago" --profile llm
+python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock|completion"
 python assets/ssh-exec.py tail astrbot --lines 200
-# 时间窗 + 关键词过滤（最常用）
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "session lock"
-python assets/ssh-exec.py log astrbot --since "1 hour ago" --grep "completion"
-# NapCat 日志
 python assets/ssh-exec.py tail napcat --lines 200
-# 服务状态 / 端口
-python assets/ssh-exec.py exec "systemctl status astrbot --no-pager"
-python assets/ssh-exec.py exec "ss -tlnp | grep -E '6185|6199'"
-# 读远程 cmd_config.json
+
+# 批处理（单连接多命令）
+python assets/ssh-exec.py batch "systemctl is-active astrbot" "ss -tlnp | head"
+
+# 配置 / 文件
 python assets/ssh-exec.py cat /opt/astrbot/data/cmd_config.json
-# WebUI 操作
-python assets/astrbot-api.py plugins list
-python assets/astrbot-api.py plugins reload --name <plugin>
+python assets/config-tool.py get platform.0
+python assets/ssh-exec.py write /tmp/x.json --file ./local.json
+python assets/ssh-exec.py sync-plugin ./my_plugin --name my_plugin
+
+# WebUI（dashboard 仅 127.0.0.1 时加 --via-ssh）
+python assets/astrbot-api.py --via-ssh plugins list
+python assets/astrbot-api.py --via-ssh plugins reload --name <plugin>
 ```
 
 下方各节默认引用上述工具。
@@ -38,8 +53,8 @@ python assets/astrbot-api.py plugins reload --name <plugin>
 
 ### 定位
 ```bash
-python assets/ssh-exec.py log astrbot --since "10 min ago" --grep -i "error\|exception\|fail"
-python assets/ssh-exec.py tail astrbot --lines 500 | findstr /i "yaml syntax bom import"
+python assets/ssh-exec.py log astrbot --since "10 min ago" --grep "error\|exception\|fail"
+python assets/ssh-exec.py log astrbot --since "30 min ago" --profile plugin --lines 100
 # 看插件目录
 python assets/ssh-exec.py exec "ls -la /opt/astrbot/data/addons/plugins/<plugin_name>/"
 # 查 metadata.yaml 是否有 BOM
@@ -60,7 +75,7 @@ python assets/ssh-exec.py exec "xxd /opt/astrbot/data/addons/plugins/<plugin_nam
 ### 修复后验证
 ```bash
 python assets/astrbot-api.py plugins reload --name <plugin_name>
-python assets/ssh-exec.py log astrbot --since "1 min ago" --grep -i "error\|reload"
+python assets/ssh-exec.py log astrbot --since "1 min ago" --grep "error\|reload"
 ```
 
 > 完整 BOM/JSON 校验流程见 `references/troubleshooting.md` #3 / #3.1 / #15
@@ -149,7 +164,7 @@ python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "unified_msg_o
 ### 定位
 ```bash
 python assets/ssh-exec.py tail napcat --lines 300
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep -i "websocket\|aiocqhttp\|405\|disconnect"
+python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "websocket\|aiocqhttp\|405\|disconnect"
 # 看端口
 python assets/ssh-exec.py exec "ss -tlnp | grep -E '6185|6199|62125'"
 # 看 AstrBot 的 aiocqhttp 配置
@@ -173,7 +188,7 @@ python assets/config-tool.py get platform.0.ws_reverse_port
 python assets/ssh-exec.py exec "systemctl restart astrbot"
 python assets/ssh-exec.py exec "napcat restart <QQ号>"
 # 30 秒后看日志
-python assets/ssh-exec.py log astrbot --since "30 sec ago" --grep -i "websocket\|connected"
+python assets/ssh-exec.py log astrbot --since "30 sec ago" --grep "websocket\|connected"
 ```
 
 ---
@@ -187,7 +202,7 @@ python assets/ssh-exec.py log astrbot --since "30 sec ago" --grep -i "websocket\
 
 ### 定位
 ```bash
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep -i "provider\|llm\|api key\|401\|403\|timeout"
+python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "provider\|llm\|api key\|401\|403\|timeout"
 # 看 provider 配置
 python assets/config-tool.py get provider.0
 python assets/config-tool.py get provider.0.api_key
@@ -216,7 +231,7 @@ python assets/config-tool.py get provider.0.type
 ### 定位
 ```bash
 python assets/ssh-exec.py exec "systemctl status astrbot --no-pager"
-python assets/ssh-exec.py log astrbot --since "10 min ago" --grep -i "json\|parse\|config"
+python assets/ssh-exec.py log astrbot --since "10 min ago" --grep "json\|parse\|config"
 # 验证 JSON
 python assets/ssh-exec.py exec "python3 -c \"import json; json.load(open('/opt/astrbot/data/cmd_config.json'))\" || echo PARSE_FAIL"
 # 查 BOM
@@ -334,7 +349,7 @@ python assets/ssh-exec.py exec "free -h"
 # 长时间观察
 python assets/ssh-exec.py exec "vmstat 5 5"
 # AstrBot 是否在积压
-python assets/ssh-exec.py log astrbot --since "30 min ago" --grep -i "queue\|backlog\|slow"
+python assets/ssh-exec.py log astrbot --since "30 min ago" --grep "queue\|backlog\|slow"
 ```
 
 ### 根因与修复
@@ -379,21 +394,17 @@ async with aiohttp.ClientSession() as s:
 
 ## 10. 排查通用三步法
 
-任何 AstrBot debug 默认按此三步开局，缩小范围后再去具体章节：
+任何 AstrBot debug **优先一条命令开局**：
 
-1. **看服务是否在跑**
-   ```bash
-   python assets/ssh-exec.py exec "systemctl status astrbot --no-pager"
-   python assets/ssh-exec.py exec "systemctl status napcat --no-pager 2>/dev/null || napcat status"
-   ```
-2. **看端口是否在听**
-   ```bash
-   python assets/ssh-exec.py exec "ss -tlnp | grep -E '6185|6199|62125'"
-   ```
-3. **看最近 5 分钟日志有无 error/exception/fail**
-   ```bash
-   python assets/ssh-exec.py log astrbot --since "5 min ago" --grep -i "error\|exception\|fail\|traceback"
-   ```
+```bash
+python assets/ssh-exec.py diagnose        # 服务 + 端口 + 近 5 分钟 error
+python assets/ssh-exec.py diagnose --full # + napcat + 插件目录 + 配置摘要
+```
 
-这三步走完，80% 的问题就能定位到具体章节约 80% 范围；剩下 20% 再深挖单
-条日志关键字（用 `--grep` 二次过滤）或读源码精华（`references/source-*.md`）。
+等价于旧版手工三步（服务 / 端口 / error 日志），且**单连接**完成。
+
+缩小范围后：
+
+- 不回复 → `trace --since "30 min ago"`
+- 其它 → 用 `--profile` / `--grep "pattern"` 深挖，或读 `references/source-*.md`
+- 远程流程细节 → `references/remote-ops-playbook.md`

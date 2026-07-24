@@ -3,6 +3,9 @@
 涵盖从自然语言需求解析到交付合规的完整流程。生成新插件时配合 `assets/plugin-scaffold.py`
 与 `references/plugin-new-checklist.md` 一起看。
 
+> **流程门禁（身份 / logo / 仓库 / push / version）以 `references/plugin-dev-playbook.md` 为准。**
+> 可执行检查：`python assets/plugin-check.py <dir>`；push 前：`python assets/git-identity.py check-push`。
+
 ## 1. 需求解析工作流（from natural language）
 
 当用户只给出自由文本需求时，先解析再实现：
@@ -20,12 +23,13 @@
    - 错误处理策略
    - 持久化数据位置（AstrBot `data` 目录）
 3. **构建顺序**：
-   1. `metadata.yaml`（若有 login.config GitHub 链接，`repo` = `{github_url}/{plugin_folder_name}`；向用户确认后使用）
-   2. `requirements.txt`
-   3. 插件代码（用 `plugin-scaffold.py` 生成骨架，再 Edit 填业务逻辑）
+   1. 身份/仓库/logo 门禁（见 plugin-dev-playbook §2.2）
+   2. `plugin-scaffold.py --from-login-config` → `metadata.yaml` 等
+   3. 插件业务代码
    4. 测试
-   5. Logo 处理（可选：`assets/logo-process.py`）
-   6. 本列表合规自检
+   5. Logo（三态：有图 process / 暂无 / 后补）
+   6. `plugin-check.py` + 本列表自检
+   7. 若 push：`git-identity.py check-push`
 
 ## 2. Metadata Compliance
 

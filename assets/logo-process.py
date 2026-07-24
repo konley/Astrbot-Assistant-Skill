@@ -36,9 +36,9 @@ def process_logo(input_path: str, output_path: str = "logo.png"):
 
 
 def main():
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "help"):
         print(__doc__)
-        sys.exit(1)
+        sys.exit(0 if len(sys.argv) > 1 else 1)
 
     input_path = sys.argv[1]
     if not os.path.isfile(input_path):

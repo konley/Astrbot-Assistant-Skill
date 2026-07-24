@@ -22,7 +22,9 @@ References (don't re-derive):
     - references/compliance-checklist.md for delivery rules
 
 Usage:
-    # bare minimum
+    # recommended: author/repo from login.config
+    python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --from-login-config
+    # bare minimum manual author
     python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --author me
 
     # with GitHub repo + deps + adapter constraint + basic config schema
@@ -47,6 +49,9 @@ import json
 import os
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import SshConfigError, load_credentials  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Templates
@@ -374,12 +379,20 @@ def main() -> int:
     p = argparse.ArgumentParser(
         description="Generate an AstrBot plugin skeleton.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Identity: use --from-login-config to fill author/repo from login.config.\n"
+            "Repo modes: --repo auto|none|<url>  (auto = {github}/{name}).\n"
+            "After generate: plugin-check.py <dir>; ask user about logo & repo create/fork."
+        ),
     )
     p.add_argument("--name", required=True,
                    help='plugin name, e.g. astrbot_plugin_weather (lowercase, no spaces)')
     p.add_argument("--desc", required=True, help='short description')
-    p.add_argument("--author", required=True)
-    p.add_argument("--repo", help='GitHub repo URL (auto-derived from login.config GitHub link if absent)')
+    p.add_argument("--author", help='defaults from login.config git profile when --from-login-config')
+    p.add_argument(
+        "--repo",
+        help='GitHub repo URL, or "auto" ({github}/{name}), or "none" (omit repo field)',
+    )
     p.add_argument("--display-name", help='display name shown in WebUI (default: --name)')
     p.add_argument("--platforms", nargs="*",
                    default=["aiocqhttp"],
@@ -392,6 +405,16 @@ def main() -> int:
                    help='config schema items, each: key:type:desc[:default]')
     p.add_argument("--out", default=".",
                    help='output parent dir (default: cwd); plugin created under <out>/<name>/')
+    p.add_argument(
+        "--from-login-config",
+        action="store_true",
+        help="fill author / repo root from login.config git profile",
+    )
+    p.add_argument("--login-config", help="path to login.config")
+    p.add_argument(
+        "--profile",
+        help="git profile name (optional; usually omit); default from login.config",
+    )
     args = p.parse_args()
 
     # Validate name
@@ -402,6 +425,40 @@ def main() -> int:
         )
         return 2
 
+    author = args.author
+    repo = args.repo
+    profile_name = args.profile
+    github_root = ""
+
+    if args.from_login_config or (not author) or (repo in (None, "auto")):
+        try:
+            creds = load_credentials(
+                explicit_path=args.login_config, quiet=True, auto_template=False
+            )
+            prof = creds.profile(args.profile)
+            profile_name = prof.name
+            github_root = (prof.github or "").rstrip("/")
+            if not author:
+                author = prof.user
+            if repo in (None, "auto") and github_root:
+                repo = f"{github_root}/{args.name}"
+            sys.stderr.write(
+                f"[scaffold] profile={profile_name} author={author!r} "
+                f"github={github_root!r} repo={repo!r}\n"
+            )
+        except SshConfigError as e:
+            if args.from_login_config or not author:
+                sys.stderr.write(f"login.config required for author/repo: {e}\n")
+                return 2
+
+    if repo == "none":
+        repo = None
+    if not author:
+        sys.stderr.write(
+            "--author is required (or use --from-login-config with [git] profile user)\n"
+        )
+        return 2
+
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -409,8 +466,8 @@ def main() -> int:
         out_dir=out_dir,
         name=args.name,
         desc=args.desc,
-        author=args.author,
-        repo=args.repo,
+        author=author,
+        repo=repo,
         display_name=args.display_name,
         platforms=args.platforms,
         astrbot_version=args.astrbot_version,
@@ -419,14 +476,28 @@ def main() -> int:
     )
 
     sys.stdout.write(f"generated plugin at: {plugin_dir}\n")
+    sys.stdout.write("gates (do NOT skip):\n")
+    sys.stdout.write("  1) Confirm author from login.config [git].user with user if needed\n")
+    sys.stdout.write("  2) Ask logo: provide image | skip | later (logo-process.py)\n")
+    sys.stdout.write(
+        "  3) Ask repo: existing URL | create new | fork template | none\n"
+    )
+    if github_root:
+        sys.stdout.write(f"     suggested create: {github_root}/{args.name}\n")
+    sys.stdout.write(f"  4) python assets/plugin-check.py {plugin_dir}\n")
     sys.stdout.write("next steps:\n")
-    sys.stdout.write(f"  cd {plugin_dir.name}\n")
+    sys.stdout.write(f"  cd {plugin_dir}\n")
     sys.stdout.write("  ruff format .\n")
     sys.stdout.write("  pytest -q\n")
-    sys.stdout.write("  # then sync to server: python ../ssh-exec.py upload main.py "
-                     f"/opt/astrbot/data/addons/plugins/{args.name}/main.py\n")
-    sys.stdout.write("  # then reload: python ../astrbot-api.py plugins reload --name "
-                     f"{args.name}\n")
+    sys.stdout.write(
+        f"  python assets/ssh-exec.py sync-plugin {plugin_dir} --name {args.name}\n"
+    )
+    sys.stdout.write(
+        f"  python assets/astrbot-api.py --via-ssh plugins reload --name {args.name}\n"
+    )
+    sys.stdout.write(
+        "  before git push: python assets/git-identity.py check-push --repo <plugin_dir>\n"
+    )
     return 0
 
 
