@@ -137,8 +137,8 @@ ws://127.0.0.1:{astrbot_ws_port}/ws
 #### 1) INI（推荐，可写注释）
 
 ```ini
-# DO NOT commit. UTF-8 no BOM.
-# [git] = 个人身份唯一来源，避免本机 global 公司账号误 push
+# AstrBot skill 凭据（login.config）— 勿提交 git；UTF-8 无 BOM
+# [ssh] 远程运维  [git] 个人身份  [dashboard] 可选 API
 [ssh]
 host = 1.2.3.4
 port = 22
@@ -146,9 +146,15 @@ user = root
 password = secret
 
 [git]
+# 个人身份唯一来源；不要填公司账号
 user = yourname
 email = you@example.com
 github = https://github.com/yourname
+
+[dashboard]
+# 可选：astrbot-api 用；port 常非默认 6185
+port = 6185
+api_key =
 ```
 
 | 段/键 | 必填 | 用途 |

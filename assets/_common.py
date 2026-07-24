@@ -236,24 +236,26 @@ _PLACEHOLDER_VALUES = {
 
 LOGIN_CONFIG_INI_TEMPLATE = """\
 # =============================================================================
-# AstrBot skill credentials  (login.config)
-# Encoding: UTF-8 without BOM
-# DO NOT commit this file to git.
+# AstrBot skill 凭据文件（login.config）
+# 编码：UTF-8（无 BOM）
+# 警告：不要把本文件提交到 git！
 #
-# [ssh]       required for remote ops
-# [git]       personal identity ONLY — plugin author / commit / push 唯一来源
-#             目的：避免被本机 global 公司 git 账号误 push
-# [dashboard] optional — astrbot-api.py WebUI/OpenAPI（端口常非默认）
-#             API key 在 WebUI「设置 → API Keys」创建，不是 cmd_config 字段
+# 段落说明：
+#   [ssh]       远程运维必填（ssh-exec / config-tool / --via-ssh）
+#   [git]       个人身份唯一来源（插件 author / commit / push）
+#               目的：避免被本机 global 公司 git 账号误 push
+#   [dashboard] 可选；仅 astrbot-api.py 调 WebUI/OpenAPI 时用
+#               API Key 在网页「设置 → API Keys」创建，不是 cmd_config 字段
 #
-# Verify SSH:  python assets/ssh-exec.py whoami
-# Verify git:  python assets/git-identity.py show
-# Pre-push:    python assets/git-identity.py check-push --repo <plugin_dir>
-# API smoke:   python assets/astrbot-api.py --via-ssh plugins list
+# 自检命令：
+#   SSH：  python assets/ssh-exec.py whoami
+#   Git：  python assets/git-identity.py show
+#   推送前：python assets/git-identity.py check-push --repo <插件目录>
+#   API：  python assets/astrbot-api.py --via-ssh plugins list
 # =============================================================================
 
 [ssh]
-# Required
+# 必填：SSH 主机 / 端口 / 用户名 / 密码
 host = 127.0.0.1
 port = 22
 user = root
@@ -263,14 +265,14 @@ password = your_password_here
 # 个人身份（唯一默认）。不要填公司账号。
 user = yourname
 email = you@example.com
-# GitHub 账号/组织根 URL（用于 metadata.yaml repo 字段）
+# GitHub 账号或组织根地址（写入 metadata.yaml 的 repo 字段）
 github = https://github.com/yourname
 
 [dashboard]
-# Optional. Used by astrbot-api.py (X-API-Key + remote port)
-# Get key: WebUI → 设置 → API Keys → 创建（前缀通常 abk_...）
-# Priority: --api-key / --dash-port > env > this file
-# 你的实例若不在 6185，请改 port（例如 62124）
+# 可选：仅给 astrbot-api.py 用（X-API-Key + 远程面板端口）
+# 取 Key：WebUI → 设置 → API Keys → 创建（一般以 abk_ 开头）
+# 优先级：命令行 --api-key / --dash-port > 环境变量 > 本文件
+# 若面板不在默认 6185，请改 port（例如 62124）
 port = 6185
 api_key =
 """
