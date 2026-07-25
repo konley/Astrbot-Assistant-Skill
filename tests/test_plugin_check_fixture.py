@@ -104,9 +104,45 @@ def test_plugin_check_no_fail_when_recommended_present():
         assert rep.ok
 
 
+def test_plugin_check_warns_missing_logger():
+    mod = _load_plugin_check()
+    with tempfile.TemporaryDirectory() as td:
+        plugin = _minimal_plugin(Path(td))
+        rep = mod.check_plugin(plugin, login_config=None)
+        codes = {i.code for i in rep.issues if i.level == "WARN"}
+        assert "logger.missing" in codes
+        assert rep.ok
+
+
+def test_plugin_check_logger_ok_and_print_warn():
+    mod = _load_plugin_check()
+    with tempfile.TemporaryDirectory() as td:
+        plugin = _minimal_plugin(Path(td))
+        (plugin / "main.py").write_text(
+            "from astrbot.api import logger\n"
+            "from astrbot.api.star import Context, Star, register\n\n"
+            '@register("astrbot_plugin_demo", "yourname", "demo", "0.1.0")\n'
+            "class Main(Star):\n"
+            "    def __init__(self, context: Context):\n"
+            "        super().__init__(context)\n"
+            "        logger.info('[astrbot_plugin_demo] initialize')\n"
+            "        print('should warn')\n",
+            encoding="utf-8",
+        )
+        rep = mod.check_plugin(plugin, login_config=None)
+        warns = {i.code for i in rep.issues if i.level == "WARN"}
+        infos = {i.code for i in rep.issues if i.level == "INFO"}
+        assert "logger.ok" in infos
+        assert "logger.missing" not in warns
+        assert "logger.print" in warns
+        assert rep.ok
+
+
 if __name__ == "__main__":
     test_plugin_check_pass_minimal()
     test_plugin_check_fail_missing_metadata()
     test_plugin_check_warns_recommended_metadata()
     test_plugin_check_no_fail_when_recommended_present()
+    test_plugin_check_warns_missing_logger()
+    test_plugin_check_logger_ok_and_print_warn()
     print("test_plugin_check_fixture: PASS")

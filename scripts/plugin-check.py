@@ -133,6 +133,95 @@ def _write_version(meta_path: Path, main_path: Path | None, new_ver: str) -> Non
             main_path.write_text(mt2, encoding="utf-8", newline="\n")
 
 
+
+_LOGGER_IMPORT_RE = re.compile(
+    r"(?:from\s+astrbot\.api\s+import\s+[^\n]*\blogger\b|"
+    r"from\s+astrbot\.api\.logger\s+import\s+|"
+    r"import\s+astrbot\.api\.logger\b|"
+    r"from\s+astrbot\s+import\s+[^\n]*\blogger\b)"
+)
+_LOGGER_CALL_RE = re.compile(
+    r"\blogger\.(?:debug|info|warning|warn|error|exception|critical)\s*\("
+)
+_PRINT_RE = re.compile(r"(?<![\w.])print\s*\(")
+
+
+def _iter_plugin_py_files(plugin_dir: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in plugin_dir.rglob("*.py"):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts:
+            continue
+        # tests are allowed to use print / skip logger
+        if "tests" in path.parts:
+            continue
+        files.append(path)
+    return files
+
+
+def _line_is_comment_or_doc_noise(line: str) -> bool:
+    s = line.strip()
+    return (not s) or s.startswith("#")
+
+
+def _check_logging(plugin_dir: Path, rep: Report) -> None:
+    """Require ops-visible logger usage; warn on bare print() in plugin code."""
+    py_files = _iter_plugin_py_files(plugin_dir)
+    if not py_files:
+        return
+
+    has_import = False
+    has_call = False
+    print_hits: list[str] = []
+
+    for path in py_files:
+        try:
+            src = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError as e:
+            rep.add("WARN", "logger.read", f"cannot read {path.relative_to(plugin_dir)}: {e}")
+            continue
+
+        if _LOGGER_IMPORT_RE.search(src):
+            has_import = True
+        if _LOGGER_CALL_RE.search(src):
+            has_call = True
+
+        rel = str(path.relative_to(plugin_dir)).replace("\\", "/")
+        for lineno, line in enumerate(src.splitlines(), 1):
+            if _line_is_comment_or_doc_noise(line):
+                continue
+            if _PRINT_RE.search(line):
+                print_hits.append(f"{rel}:{lineno}")
+
+    if not has_import:
+        rep.add(
+            "WARN",
+            "logger.missing",
+            "no `from astrbot.api import logger` in plugin code - "
+            "runtime signals must go through astrbot logger for `log --profile plugin`",
+        )
+    elif not has_call:
+        rep.add(
+            "WARN",
+            "logger.unused",
+            "logger imported but no logger.info/error/exception calls found "
+            "(log lifecycle + command/handler entry + failures)",
+        )
+    else:
+        rep.add("INFO", "logger.ok", "astrbot.api logger import + calls present")
+
+    if print_hits:
+        sample = ", ".join(print_hits[:5])
+        extra = f" (+{len(print_hits) - 5} more)" if len(print_hits) > 5 else ""
+        rep.add(
+            "WARN",
+            "logger.print",
+            f"found print() in plugin code: {sample}{extra}; "
+            "prefer logger.* so remote journal queries work",
+        )
+
+
 def check_plugin(
     plugin_dir: Path,
     *,
@@ -358,6 +447,9 @@ def check_plugin(
     # requirements
     if not (plugin_dir / "requirements.txt").is_file():
         rep.add("INFO", "reqs.missing", "requirements.txt missing (ok if no deps)")
+
+    # observability / logging contract
+    _check_logging(plugin_dir, rep)
 
     # version suggestion
     cur = str(meta.get("version") or "0.1.0")

@@ -8,7 +8,7 @@
 | 工具 | 作用 |
 |---|---|
 | `plugin-scaffold.py` | 生成合规骨架；`--from-login-config` 注入 author/github；可选 `--with-lifecycle` |
-| `plugin-check.py` | 元数据/logo/repo/BOM/@register 检查；`--bump` 升版 |
+| `plugin-check.py` | 元数据/logo/repo/BOM/@register/logger 检查；`--bump` 升版 |
 | `git-identity.py` | 锁定 login.config 个人身份：`show` / `status` / `fix` / `check-push` |
 | `logo-process.py` | logo 处理（可选） |
 | `ssh-exec.py sync-plugin` | 本地 → 远端插件目录同步 |
@@ -86,6 +86,27 @@ python scripts/plugin-scaffold.py \
 - 通用 API 速查：`api-cheatsheet.md`（先 `framework check`）
 - Tool / tool_loop / cron / subagent / Agent hooks：`agent-tools.md`
 - 远程排障仍走 `remote-ops-playbook.md`，不要用开发文档替代运维契约
+
+### 2.2.2 可观测日志契约（新建默认启用）
+
+插件要让远端 `log --profile plugin` / `--grep <plugin_name>` 能查到关键信号。
+
+硬要求：
+1. `from astrbot.api import logger`（不要 `print` 当运行日志）
+2. 日志带稳定前缀：`[astrbot_plugin_xxx] ...`
+3. 至少覆盖：
+   - 生命周期：`initialize` / `terminate`
+   - 指令或关键 handler 入口（含 sender / 关键参数摘要）
+   - 失败：`logger.error` 或 `logger.exception`
+4. `plugin-scaffold.py` 默认骨架已带 logger；`--with-lifecycle` 同样带
+5. `plugin-check.py` 会对 `logger.missing` / `logger.unused` / `logger.print` 给 **WARN**
+
+查日志示例：
+
+```bash
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --profile plugin
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --grep "astrbot_plugin_example"
+```
 
 ### 2.3 写业务 + 合规检查
 

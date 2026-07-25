@@ -9,6 +9,7 @@
 ## 1. 插件骨架
 
 ```python
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
@@ -34,6 +35,27 @@ class Demo(Star):
 - 被动回复：`yield event.plain_result(...)` / `yield event.chain_result([...])`
 - 主动发送：`await event.send(...)` 或 `await self.context.send_message(umo, chain)`
 - 生命周期方法名是 **`initialize` / `terminate`**（不是 `activate`）
+
+## 1.5 日志（可观测性，必做）
+
+```python
+from astrbot.api import logger
+
+logger.info("[astrbot_plugin_demo] initialize")
+logger.info("[astrbot_plugin_demo] command=hello sender=%s", event.get_sender_name())
+try:
+    ...
+except Exception:
+    logger.exception("[astrbot_plugin_demo] command=hello failed")
+    raise
+```
+
+约定：
+- 只用 `astrbot.api.logger`，不要 `print` 当运行信号
+- 前缀固定为 `[plugin_name]`，方便 `ssh-exec.py log ... --grep plugin_name`
+- 至少：生命周期 + 关键 handler 入口 + 异常
+- `plugin-check` 对缺失 logger / 裸 print 给 WARN
+
 
 ## 2. 常用 filter
 

@@ -74,6 +74,20 @@ aiocqhttp · qq_official · telegram · wecom · lark · dingtalk · discord · 
   ```
 - Fix BOM: rewrite with `New-Object System.Text.UTF8Encoding($false)` after `TrimStart([char]0xFEFF)`.
 
+## 5.5 Observability / Logging (required for new plugins)
+
+- Use `from astrbot.api import logger` in plugin runtime code.
+- Prefer stable prefixes: `[plugin_name] event=...`.
+- Must log:
+  - lifecycle (`initialize` / `terminate` when present)
+  - command / critical handler entry
+  - unexpected failures via `logger.exception` or `logger.error`
+- Do **not** use bare `print()` for runtime signals (tests may print).
+- `plugin-check.py` emits WARN codes: `logger.missing`, `logger.unused`, `logger.print`.
+- After deploy, verify with:
+  - `python scripts/ssh-exec.py log astrbot --since "10 min ago" --profile plugin`
+  - or `--grep "<plugin_name>"`
+
 ## 6. Test Compliance
 
 ### Test Layers

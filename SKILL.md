@@ -64,7 +64,8 @@ cn_description: >-
 6. 部署：`sync-plugin` + `astrbot-api.py --via-ssh plugins reload`。
 7. 禁止：公司 global 账号静默 push；禁止 SSH 里改业务源码。
 8. 写 API / tool / cron / subagent：先读 `references/api-cheatsheet.md`；Agent 专题再读 `references/agent-tools.md`。
-9. 骨架可选生命周期：`plugin-scaffold.py --with-lifecycle`（默认仍最小可用）。
+9. 骨架可选生命周期：`plugin-scaffold.py --with-lifecycle`（默认仍最小可用，但默认也带 logger）。
+10. **可观测日志（新建/改插件必做）**：`from astrbot.api import logger`；关键路径打 `info/error/exception`；消息带稳定前缀 `[plugin_name]`；禁止用 `print` 当运行信号。交付前处理 `plugin-check` 的 `logger.missing`/`logger.print`（旧插件可暂 WARN）。查日志：`ssh-exec.py log astrbot --profile plugin` 或 `--grep plugin_name`。
 
 ## 插件 API / Agent 文档路由（按需，不替代运维契约）
 
@@ -188,6 +189,7 @@ api_key =
 8. 依赖框架 API 前必须 `framework check`；版本不一致先对齐；`api-cheatsheet`/`agent-tools` 是速查，不是 runtime 权威。  
 9. `_conf_schema.json` type 以 `source-config-schema.md` 为准（无 `choices`/`select`）。  
 10. 生成代码提交前 ruff 格式化。
+11. 插件运行信号必须走 `astrbot.api.logger`（带 `[plugin_name]` 前缀），禁止 `print` 充当运维日志；脚手架默认已带，改插件时也要补齐。
 
 > references 内不再重复展开上述清单，只引用「硬约束 #N」。
 

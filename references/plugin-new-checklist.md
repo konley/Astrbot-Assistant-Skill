@@ -73,11 +73,20 @@ AstrBot version examples:
 - Use requirements.txt for third-party dependencies.
 - Missing dependencies can break plugin installation.
 
+## Observability / Logging
+- Always `from astrbot.api import logger`.
+- Prefix logs with `[plugin_name]` for stable greps.
+- Log initialize/terminate, command entry, and failures (`logger.exception`).
+- Do not use `print()` for runtime signals.
+- Query after reload: `ssh-exec.py log astrbot --profile plugin` or `--grep <plugin_name>`.
+- `plugin-check.py` warns on missing logger / bare print.
+
 ## Development Principles
 - Test features before release.
 - Keep useful comments.
 - Store persistent data under data directory, not plugin directory.
 - Add robust error handling.
+- Expose ops-visible logs via astrbot.api logger (no bare print).
 - Prefer async HTTP clients (aiohttp/httpx), avoid requests.
 - Run ruff formatting before commit.
 

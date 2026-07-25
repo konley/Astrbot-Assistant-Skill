@@ -28,6 +28,7 @@ Usage:
     python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --author me
     # optional lifecycle template (initialize/terminate + aiohttp)
     python plugin-scaffold.py --name astrbot_plugin_xxx --desc "..." --author me --with-lifecycle
+    # default skeleton always includes astrbot.api logger + [{name}] prefixes
 
     # with GitHub repo + deps + adapter constraint + basic config schema
     python plugin-scaffold.py \\
@@ -51,6 +52,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import SshConfigError, load_credentials  # noqa: E402
@@ -71,9 +73,15 @@ MAIN_TEMPLATE = '''\
 """AstrBot plugin: {name}.
 
 {desc}
+
+Logging contract:
+  - Always use `from astrbot.api import logger` (never print for ops signals).
+  - Prefix messages with [{name}] so remote greps stay stable.
+  - Log lifecycle + command entry; use logger.exception on unexpected failures.
 """
 from __future__ import annotations
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
@@ -84,23 +92,35 @@ class {class_name}(Star):
         super().__init__(context)
         self.config = config or {{}}
 
+    async def initialize(self) -> None:
+        """Called after the plugin is activated."""
+        logger.info("[{name}] initialize")
+
     @filter.command("hello")
     async def hello(self, event: AstrMessageEvent):
         """Reply with a greeting. Trigger: /hello"""
+        logger.info(
+            "[{name}] command=hello sender=%s",
+            event.get_sender_name(),
+        )
         yield event.plain_result(f"Hello from {name}!")
 
     async def terminate(self):
         """Called when plugin is reloaded/unloaded. Clean up resources."""
-        pass
+        logger.info("[{name}] terminate")
 '''
 
-# Optional richer lifecycle template (--with-lifecycle). Default remains minimal.
+# Optional richer lifecycle template (--with-lifecycle). Default is minimal but still logs.
 MAIN_LIFECYCLE_TEMPLATE = '''\
 """AstrBot plugin: {name}.
 
 {desc}
 
 Includes initialize/terminate resource management. Remove unused parts freely.
+
+Logging contract:
+  - Use astrbot.api logger with [{name}] prefixes (no bare print for ops signals).
+  - Log initialize/terminate, command entry, and unexpected failures.
 """
 from __future__ import annotations
 
@@ -123,13 +143,13 @@ class {class_name}(Star):
 
     async def initialize(self) -> None:
         """Called after the plugin is activated."""
-        logger.info("{name} initialize")
+        logger.info("[{name}] initialize")
         self._session = aiohttp.ClientSession()
         self._bg_task = asyncio.create_task(self._heartbeat())
 
     async def terminate(self) -> None:
         """Called on unload/reload. Must release resources."""
-        logger.info("{name} terminate — cleaning up")
+        logger.info("[{name}] terminate - cleaning up")
         if self._bg_task and not self._bg_task.done():
             self._bg_task.cancel()
             try:
@@ -137,7 +157,7 @@ class {class_name}(Star):
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                logger.error(f"bg task cancel error: {{e}}")
+                logger.error(f"[{name}] bg task cancel error: {{e}}")
         if self._session and not self._session.closed:
             await self._session.close()
         await self._save_state()
@@ -146,17 +166,21 @@ class {class_name}(Star):
         try:
             while True:
                 await asyncio.sleep(1800)
-                logger.debug("{name} heartbeat")
+                logger.debug("[{name}] heartbeat")
         except asyncio.CancelledError:
             raise
 
     async def _save_state(self) -> None:
         data_dir = StarTools.get_data_dir()
-        logger.info(f"plugin data dir: {{data_dir}}")
+        logger.info(f"[{name}] plugin data dir: {{data_dir}}")
 
     @filter.command("hello")
     async def hello(self, event: AstrMessageEvent):
         """Reply with a greeting. Trigger: /hello"""
+        logger.info(
+            "[{name}] command=hello sender=%s",
+            event.get_sender_name(),
+        )
         yield event.plain_result(f"Hello from {name}!")
 '''
 
@@ -225,9 +249,18 @@ def _stub_astrbot_modules():
     core_plat = types.ModuleType("astrbot.core.platform.astr_message_message")
     core_plat.MessageResult = type("MessageResult", (), {{}})
     # Package hierarchy
+    api_mod = types.ModuleType("astrbot.api")
+    api_mod.logger = types.SimpleNamespace(
+        debug=lambda *a, **k: None,
+        info=lambda *a, **k: None,
+        warning=lambda *a, **k: None,
+        error=lambda *a, **k: None,
+        exception=lambda *a, **k: None,
+        critical=lambda *a, **k: None,
+    )
     for name, mod in [
         ("astrbot", types.ModuleType("astrbot")),
-        ("astrbot.api", types.ModuleType("astrbot.api")),
+        ("astrbot.api", api_mod),
         ("astrbot.core", types.ModuleType("astrbot.core")),
         ("astrbot.core.platform", types.ModuleType("astrbot.core.platform")),
         ("astrbot.api.event", api_event),
@@ -268,6 +301,18 @@ In AstrBot WebUI → Plugin market → install from `{repo_or_local}`.
 
 See `_conf_schema.json`. Edit via WebUI plugin config page.
 
+## Logs
+
+Ops-visible logs use `from astrbot.api import logger` with a stable `[{name}]` prefix.
+Query after reload:
+
+```bash
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --profile plugin
+python scripts/ssh-exec.py log astrbot --since "10 min ago" --grep "{name}"
+```
+
+Do not use bare `print()` for runtime signals.
+
 ## Dev
 
 ```bash
@@ -276,7 +321,7 @@ ruff format .
 pytest -q
 ```
 
-Reload after code changes (WebUI → Plugin management → reload).
+Reload after code changes (WebUI -> Plugin management -> reload).
 """
 
 
@@ -553,6 +598,10 @@ def main() -> int:
     if args.with_lifecycle:
         sys.stdout.write("  note: generated with --with-lifecycle (initialize/terminate)\n")
     sys.stdout.write(f"  4) python scripts/plugin-check.py {plugin_dir}\n")
+    sys.stdout.write(
+        f"  5) keep logger.info/error with [{args.name}] prefix; "
+        "avoid print() for runtime signals\n"
+    )
     sys.stdout.write("next steps:\n")
     sys.stdout.write(f"  cd {plugin_dir}\n")
     sys.stdout.write("  ruff format .\n")
