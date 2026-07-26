@@ -1,10 +1,11 @@
 """
-AstrBot Skill - SSH common library.
+AstrBot Skill - host ops common library (local + SSH remote).
 
-Shared foundation for all remote-operation tools in this skill. Provides:
+Shared foundation for all host-operation tools in this skill. Provides:
   - login.config discovery + parsing (single source of truth)
+  - runtime mode resolution: auto | local | remote
   - skill root resolution
-  - connection management
+  - connection / local session management
   - exec / batch exec / read_file / write_file / upload / download / upload_dir
   - ExecResult dataclass for structured command output
 
@@ -13,10 +14,10 @@ Design rules:
     CLI wrappers decide what to print.
   - Raise specific exceptions (SshConfigError, SshExecError) so callers can
     catch granularly.
-  - All file writes go through SFTP (no heredoc, no BOM issues).
+  - Remote file writes go through SFTP (no heredoc, no BOM issues).
+  - Local mode uses subprocess + filesystem directly (no SSH/paramiko).
 
-Imported by: scripts/ssh-exec.py, config-tool.py, plugin-scaffold.py, astrbot-api.py
-(for --via-ssh).
+Imported by: scripts/ssh-exec.py, config-tool.py, plugin-scaffold.py, astrbot-api.py.
 
 Usage:
     import sys; sys.path.insert(0, str(Path(__file__).parent))  # scripts/
@@ -28,17 +29,17 @@ import configparser
 import json
 import os
 import re
+import shutil
 import stat
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
     import paramiko
-except ImportError as e:
-    raise ImportError(
-        "paramiko not installed. Run: pip install paramiko"
-    ) from e
+except ImportError:  # optional in local mode
+    paramiko = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +51,139 @@ class SshConfigError(Exception):
 
 
 class SshExecError(Exception):
-    """Remote command failed (non-zero exit or SSH error)."""
+    """Host command failed (non-zero exit, local error, or SSH error)."""
+
+
+class RuntimeConfigError(SshConfigError):
+    """runtime mode / host layout misconfigured."""
+
+
+# ---------------------------------------------------------------------------
+# Runtime mode
+# ---------------------------------------------------------------------------
+
+RUNTIME_MODES = ("auto", "local", "remote")
+ENV_RUNTIME_MODE = "ASTRBOT_RUNTIME_MODE"
+
+
+class LocalClient:
+    """Marker session for local runtime mode (API-compatible close())."""
+
+    def close(self) -> None:
+        return None
+
+    def open_sftp(self):  # pragma: no cover - defensive
+        raise SshExecError("open_sftp is unavailable in local mode")
+
+    def invoke_shell(self):  # pragma: no cover - defensive
+        raise SshExecError(
+            "invoke_shell is unavailable in local mode; use exec_command"
+        )
+
+
+def _normalize_runtime_mode(value: str | None, *, default: str = "auto") -> str:
+    mode = (value or default or "auto").strip().lower() or "auto"
+    if mode not in RUNTIME_MODES:
+        raise SshConfigError(
+            f"invalid runtime.mode={value!r}; use one of: {', '.join(RUNTIME_MODES)}"
+        )
+    return mode
+
+
+def detect_local_install(paths: "PathLayout | None" = None) -> dict:
+    """Probe whether AstrBot appears installed on this machine."""
+    layout = paths or PathLayout()
+    markers: list[str] = []
+    candidates = [
+        layout.cmd_config,
+        layout.astrbot_root,
+        f"{layout.data_dir}/cmd_config.json" if layout.data_dir else "",
+        f"{layout.astrbot_root}/data/cmd_config.json" if layout.astrbot_root else "",
+        "/opt/astrbot/data/cmd_config.json",
+        "/opt/astrbot",
+    ]
+    for raw in candidates:
+        p = (raw or "").strip()
+        if not p:
+            continue
+        try:
+            if Path(p).exists():
+                markers.append(str(Path(p)))
+        except OSError:
+            continue
+    # de-dupe preserve order
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for m in markers:
+        if m in seen:
+            continue
+        seen.add(m)
+        uniq.append(m)
+    return {"detected": bool(uniq), "markers": uniq}
+
+
+def ssh_auth_ready(
+    *,
+    host: str = "",
+    user: str = "",
+    password: str = "",
+    identity_file: str = "",
+    allow_agent: bool = False,
+) -> bool:
+    host_ok = bool((host or "").strip())
+    user_ok = bool((user or "").strip())
+    has_password = bool((password or "").strip()) and not _is_placeholder(password)
+    has_key = bool((identity_file or "").strip()) and not _is_placeholder(identity_file)
+    return host_ok and user_ok and (has_password or has_key or bool(allow_agent))
+
+
+def resolve_runtime_mode(
+    requested: str,
+    *,
+    paths: "PathLayout | None" = None,
+    host: str = "",
+    user: str = "",
+    password: str = "",
+    identity_file: str = "",
+    allow_agent: bool = False,
+    env_mode: str | None = None,
+) -> tuple[str, str]:
+    """Return (requested_mode, resolved_mode) where resolved is local|remote.
+
+    Priority:
+      1) explicit env ASTRBOT_RUNTIME_MODE (if set)
+      2) login.config [runtime].mode
+      3) auto: local install markers -> local; else SSH ready -> remote
+    """
+    env_raw = env_mode if env_mode is not None else os.environ.get(ENV_RUNTIME_MODE)
+    if env_raw is not None and str(env_raw).strip():
+        requested = _normalize_runtime_mode(str(env_raw), default="auto")
+    else:
+        requested = _normalize_runtime_mode(requested, default="auto")
+
+    if requested == "local":
+        return requested, "local"
+    if requested == "remote":
+        return requested, "remote"
+
+    # auto
+    local_info = detect_local_install(paths)
+    if local_info["detected"]:
+        return requested, "local"
+    if ssh_auth_ready(
+        host=host,
+        user=user,
+        password=password,
+        identity_file=identity_file,
+        allow_agent=allow_agent,
+    ):
+        return requested, "remote"
+    raise SshConfigError(
+        "runtime.mode=auto could not decide local vs remote.\n"
+        "Set [runtime] mode = local|remote, or export ASTRBOT_RUNTIME_MODE,\n"
+        "or ensure local AstrBot paths exist / SSH credentials are complete.\n"
+        f"local_markers={local_info.get('markers') or []}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +210,7 @@ class GitProfile:
 
 @dataclass
 class PathLayout:
-    """Remote filesystem / systemd layout (overridable via login.config [paths])."""
+    """Host filesystem / systemd layout (overridable via login.config [paths])."""
 
     astrbot_root: str = "/opt/astrbot"
     data_dir: str = ""
@@ -143,11 +276,23 @@ class Credentials:
     # SSH auth (password and/or key / agent)
     identity_file: str = ""
     allow_agent: bool = False
-    # Remote layout
+    # Host layout (local filesystem paths when mode=local)
     paths: PathLayout = field(default_factory=PathLayout)
+    # Runtime transport
+    runtime_mode: str = "auto"      # requested: auto|local|remote
+    resolved_mode: str = "remote"   # effective: local|remote
 
     def __str__(self) -> str:
+        if self.is_local():
+            root = getattr(self.paths, "astrbot_root", "") or ""
+            return f"local(root={root or '?'})"
         return f"{self.username}@{self.host}:{self.port}"
+
+    def is_local(self) -> bool:
+        return (self.resolved_mode or "").strip().lower() == "local"
+
+    def is_remote(self) -> bool:
+        return not self.is_local()
 
     def auth_methods(self) -> list[str]:
         methods: list[str] = []
@@ -308,6 +453,7 @@ ENV_SKILL_ROOT = "ASTRBOT_SKILL_ROOT"
 ENV_SSH_PASSWORD = "ASTRBOT_SSH_PASSWORD"
 ENV_SSH_IDENTITY = "ASTRBOT_SSH_IDENTITY"
 ENV_SSH_ALLOW_AGENT = "ASTRBOT_SSH_ALLOW_AGENT"
+# ENV_RUNTIME_MODE defined above with runtime helpers
 
 # Placeholders that mean "user has not filled yet"
 _PLACEHOLDER_VALUES = {
@@ -332,23 +478,39 @@ LOGIN_CONFIG_INI_TEMPLATE = """\
 # 警告：不要把本文件提交到 git！
 #
 # 段落说明：
-#   [ssh]       远程运维（密码 和/或 私钥；至少一种）
+#   [runtime]   执行模式：auto | local | remote（关键！）
+#   [ssh]       远程运维（mode=remote 时需要；密码 和/或 私钥至少一种）
 #   [git]       个人身份唯一来源（插件 author / commit / push）
 #   [dashboard] 可选；astrbot-api.py 调 WebUI/OpenAPI
-#   [paths]     可选；远端安装路径与 systemd 单元名
+#   [paths]     可选；本机/远端安装路径与 systemd 单元名
 #
-# 环境变量（可代替文件中的敏感字段）：
+# 模式怎么选：
+#   local  — skill 跑在机器人主机上，直接读本机路径 / journalctl / localhost API
+#   remote — skill 跑在开发机上，通过 SSH/SFTP 操作远端
+#   auto   — 本机发现 AstrBot 路径 → local；否则 SSH 凭据齐全 → remote
+#
+# 环境变量（可代替文件中的敏感字段 / 覆盖模式）：
+#   ASTRBOT_RUNTIME_MODE=local|remote|auto
 #   ASTRBOT_SSH_PASSWORD / ASTRBOT_SSH_IDENTITY / ASTRBOT_SSH_ALLOW_AGENT=1
 #   ASTRBOT_LOGIN_CONFIG / ASTRBOT_SKILL_ROOT / ASTRBOT_API_KEY / ASTRBOT_DASH_PORT
 #
 # 自检：
 #   python scripts/ssh-exec.py whoami
+#   python scripts/ssh-exec.py diagnose --full
 #   python scripts/git-identity.py show
-#   python scripts/git-identity.py check-push --repo <插件目录>
+#   # local 模式：
+#   python scripts/astrbot-api.py plugins list
+#   # remote 模式：
 #   python scripts/astrbot-api.py --via-ssh plugins list
 # =============================================================================
 
+[runtime]
+# auto | local | remote
+# 机器人主机上建议 local；Windows 开发机远程运维建议 remote
+mode = auto
+
 [ssh]
+# mode=remote（或 auto 落到 remote）时需要
 host = 127.0.0.1
 port = 22
 user = root
@@ -366,12 +528,17 @@ email = you@example.com
 github = https://github.com/yourname
 
 [dashboard]
-# 可选：仅给 astrbot-api.py 用（X-API-Key + 远程面板端口）
+# 可选：astrbot-api.py 用（X-API-Key + 面板端口）
+# local 模式直连 http://127.0.0.1:<port>
+# remote 模式配合 --via-ssh 走远端 curl
 port = 6185
 api_key =
 
 [paths]
-# 可选：覆盖远端默认布局（默认 /opt/astrbot）
+# 可选：覆盖默认布局（默认 /opt/astrbot）
+# local 与 remote 共用这些路径语义：
+#   local  = 本机真实路径
+#   remote = 远端真实路径
 # astrbot_root = /opt/astrbot
 # data_dir = /opt/astrbot/data
 # plugins_dir = /opt/astrbot/data/addons/plugins
@@ -385,6 +552,9 @@ api_key =
 
 LOGIN_CONFIG_JSON_TEMPLATE = """\
 {
+  "runtime": {
+    "mode": "auto"
+  },
   "ssh": {
     "host": "127.0.0.1",
     "port": 22,
@@ -626,6 +796,7 @@ def _creds_from_fields(
     identity_file: str = "",
     allow_agent: bool | str = False,
     paths: PathLayout | dict | None = None,
+    runtime_mode: str = "auto",
 ) -> Credentials:
     host = (host or "").strip()
     user = (user or "").strip()
@@ -643,28 +814,53 @@ def _creds_from_fields(
         identity_file = (os.environ.get(ENV_SSH_IDENTITY) or "").strip()
     if not allow_agent:
         allow_agent = _parse_bool(os.environ.get(ENV_SSH_ALLOW_AGENT), False)
-    has_password = bool(password) and not _is_placeholder(password)
-    has_key = bool(identity_file)
-    if not host or not user or not (has_password or has_key or allow_agent):
-        raise SshConfigError(
-            f"login.config incomplete at {source or '(unknown)'}."
-            "\n"
-            "Required [ssh]: host, user, and at least one of: password | identity_file | allow_agent."
-            "\n"
-            "Or set ASTRBOT_SSH_PASSWORD / ASTRBOT_SSH_IDENTITY / ASTRBOT_SSH_ALLOW_AGENT."
-            "\n"
-            "Example:"
-            "\n"
-            "  [ssh]\n  host = 1.2.3.4\n  port = 22\n  user = root\n"
-            "  password = ...\n  # or identity_file = ~/.ssh/id_ed25519\n"
-            "Or: python scripts/ssh-exec.py init-config --force"
-        )
+
     if isinstance(paths, PathLayout):
         path_layout = paths
     elif isinstance(paths, dict):
         path_layout = _parse_paths_mapping(paths)
     else:
         path_layout = PathLayout()
+
+    requested_mode, resolved_mode = resolve_runtime_mode(
+        runtime_mode,
+        paths=path_layout,
+        host=host,
+        user=user,
+        password=password,
+        identity_file=identity_file,
+        allow_agent=bool(allow_agent),
+    )
+
+    has_password = bool(password) and not _is_placeholder(password)
+    has_key = bool(identity_file)
+    if resolved_mode == "remote":
+        if not host or not user or not (has_password or has_key or allow_agent):
+            raise SshConfigError(
+                f"login.config incomplete at {source or '(unknown)'} for runtime.mode=remote."
+                "\n"
+                "Required [ssh]: host, user, and at least one of: password | identity_file | allow_agent."
+                "\n"
+                "Or set ASTRBOT_SSH_PASSWORD / ASTRBOT_SSH_IDENTITY / ASTRBOT_SSH_ALLOW_AGENT."
+                "\n"
+                "If this skill runs on the robot host itself, set:\n"
+                "  [runtime]\n  mode = local\n"
+                "Example remote:\n"
+                "  [ssh]\n  host = 1.2.3.4\n  port = 22\n  user = root\n"
+                "  password = ...\n  # or identity_file = ~/.ssh/id_ed25519\n"
+                "Or: python scripts/ssh-exec.py init-config --force"
+            )
+    else:
+        # local mode: SSH optional; fill friendly defaults for display
+        if not host:
+            host = "localhost"
+        if not user:
+            user = (
+                os.environ.get("USER")
+                or os.environ.get("USERNAME")
+                or "local"
+            ).strip() or "local"
+
     profiles: dict[str, GitProfile] = {}
     for k, v in (git_profiles or {}).items():
         if isinstance(v, GitProfile):
@@ -724,7 +920,10 @@ def _creds_from_fields(
         identity_file=str(Path(identity_file).expanduser()) if identity_file else "",
         allow_agent=bool(allow_agent),
         paths=path_layout,
+        runtime_mode=requested_mode,
+        resolved_mode=resolved_mode,
     )
+
 
 
 def _parse_login_ini(text: str, path: Path) -> Credentials:
@@ -738,6 +937,7 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
     git_sec = None
     dash_sec = None
     paths_sec = None
+    runtime_sec = None
     profile_secs: dict[str, str] = {}  # profile_name -> section name
     for name in cp.sections():
         low = name.lower()
@@ -751,12 +951,16 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
             git_sec = git_sec or name
         elif low in ("dashboard", "webui", "openapi", "api"):
             dash_sec = name
-        elif low in ("paths", "path", "layout", "remote_paths"):
+        elif low in ("paths", "path", "layout", "remote_paths", "host_paths"):
             paths_sec = name
+        elif low in ("runtime", "mode", "ops", "host"):
+            runtime_sec = name
 
-    if ssh_sec is None:
+    # [ssh] optional only when mode resolves to local; still recommended for dual-use configs.
+    if ssh_sec is None and runtime_sec is None:
+        # keep backward compatible hard fail for completely empty configs
         raise SshConfigError(
-            f"login.config INI missing [ssh] section: {path}"
+            f"login.config INI missing [ssh] (and no [runtime]) section: {path}"
         )
 
     def g(sec: str | None, *keys: str, default: str = "") -> str:
@@ -854,6 +1058,8 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
         "python_bin": g(paths_sec, "python_bin", "python"),
     }
 
+    runtime_mode = g(runtime_sec, "mode", "runtime_mode", "transport", default="auto") or "auto"
+
     return _creds_from_fields(
         host=host,
         port=port,
@@ -870,6 +1076,7 @@ def _parse_login_ini(text: str, path: Path) -> Credentials:
         identity_file=identity_file,
         allow_agent=allow_agent_raw,
         paths=path_map,
+        runtime_mode=runtime_mode,
     )
 
 
@@ -956,6 +1163,19 @@ def _parse_login_json(text: str, path: Path) -> Credentials:
     if not isinstance(paths_raw, dict):
         paths_raw = {}
 
+    runtime_raw = data.get("runtime") or data.get("mode") or {}
+    if isinstance(runtime_raw, str):
+        runtime_mode = runtime_raw
+    elif isinstance(runtime_raw, dict):
+        runtime_mode = str(
+            runtime_raw.get("mode")
+            or runtime_raw.get("runtime_mode")
+            or runtime_raw.get("transport")
+            or "auto"
+        )
+    else:
+        runtime_mode = str(data.get("runtime_mode") or "auto")
+
     return _creds_from_fields(
         host=host,
         port=port_i,
@@ -972,6 +1192,7 @@ def _parse_login_json(text: str, path: Path) -> Credentials:
         identity_file=identity_file,
         allow_agent=allow_agent_raw,
         paths=paths_raw,
+        runtime_mode=runtime_mode,
     )
 
 
@@ -1136,6 +1357,7 @@ def load_credentials(
             identity_file=env_identity,
             allow_agent=env_agent,
             source="flags",
+            runtime_mode=os.environ.get(ENV_RUNTIME_MODE) or "remote",
         )
 
     searched: list[str] = []
@@ -1173,20 +1395,78 @@ def load_credentials(
     creds = parse_login_config(cfg)
     if not quiet:
         import sys
-        sys.stderr.write(f"[_common] using {creds} (from {cfg})\n")
+        sys.stderr.write(
+            f"[_common] mode={creds.resolved_mode} "
+            f"(requested={creds.runtime_mode}) using {creds} (from {cfg})\n"
+        )
     return creds
 
 
 # ---------------------------------------------------------------------------
-# Connection + exec primitives
+# Connection + exec primitives (local filesystem / subprocess OR SSH/SFTP)
 # ---------------------------------------------------------------------------
 
-def connect(creds: Credentials, timeout: int = 15) -> paramiko.SSHClient:
-    """Open a new SSH client. Caller is responsible for closing.
+def _require_paramiko() -> None:
+    if paramiko is None:
+        raise SshExecError(
+            "paramiko not installed (required for runtime.mode=remote). "
+            "Run: pip install paramiko\n"
+            "Or set [runtime] mode = local when operating on the robot host itself."
+        )
 
-    Auth: password and/or identity_file and/or ssh-agent (see Credentials).
-    Never logs secret material.
+
+def _local_path(path: str) -> Path:
+    # Keep POSIX-looking absolute paths on Linux; on Windows Path handles drive letters.
+    return Path(path).expanduser()
+
+
+def _local_exec(command: str, *, timeout: int = 120) -> ExecResult:
+    """Run a shell command on this host."""
+    kwargs: dict = {
+        "args": command,
+        "shell": True,
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "timeout": timeout,
+    }
+    # Prefer bash on Unix so journalctl pipelines match remote semantics.
+    if os.name != "nt" and Path("/bin/bash").is_file():
+        kwargs["executable"] = "/bin/bash"
+    try:
+        r = subprocess.run(**kwargs)
+        return ExecResult(
+            rc=int(r.returncode),
+            stdout=r.stdout or "",
+            stderr=r.stderr or "",
+        )
+    except subprocess.TimeoutExpired as e:
+        out = ""
+        err = f"local exec timeout after {timeout}s"
+        if e.stdout:
+            out = e.stdout if isinstance(e.stdout, str) else e.stdout.decode("utf-8", "replace")
+        if e.stderr:
+            err = (
+                e.stderr if isinstance(e.stderr, str) else e.stderr.decode("utf-8", "replace")
+            ) or err
+        return ExecResult(rc=124, stdout=out, stderr=err)
+    except Exception as e:
+        raise SshExecError(
+            f"local exec failed: {type(e).__name__}: {e}\ncommand: {command}"
+        ) from e
+
+
+def connect(creds: Credentials, timeout: int = 15):
+    """Open a session. Local mode returns LocalClient; remote returns SSHClient.
+
+    Caller is responsible for closing. Auth (remote): password and/or
+    identity_file and/or ssh-agent. Never logs secret material.
     """
+    if creds.is_local():
+        return LocalClient()
+
+    _require_paramiko()
     c = paramiko.SSHClient()
     c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     password = (creds.password or "").strip()
@@ -1233,13 +1513,17 @@ def exec_command(
     command: str,
     *,
     timeout: int = 120,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> ExecResult:
-    """Run a shell command remotely. Returns ExecResult.
+    """Run a shell command on the target host. Returns ExecResult.
 
-    If `client` is None, opens a fresh connection and closes it after.
-    If `client` provided, reuses it (caller closes).
+    If `client` is None, opens a fresh connection/session and closes it after.
+    If `client` provided, reuses it (caller closes). Local mode ignores client
+    content but still respects own_client close semantics.
     """
+    if creds.is_local():
+        return _local_exec(command, timeout=timeout)
+
     own_client = client is None
     if own_client:
         client = connect(creds)
@@ -1256,7 +1540,7 @@ def exec_command(
             f"exec failed on {creds}: {type(e).__name__}: {e}\ncommand: {command}"
         ) from e
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
 
 
@@ -1266,9 +1550,9 @@ def exec_batch(
     *,
     timeout: int = 120,
     stop_on_error: bool = False,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> list[BatchStepResult]:
-    """Run multiple commands on a single SSH connection."""
+    """Run multiple commands on a single session/connection."""
     own_client = client is None
     if own_client:
         client = connect(creds)
@@ -1284,7 +1568,7 @@ def exec_batch(
                 break
         return results
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
 
 
@@ -1292,9 +1576,15 @@ def read_file(
     creds: Credentials,
     remote_path: str,
     *,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> str:
-    """Read a remote file via SFTP. Raises SshExecError on missing/failed."""
+    """Read a host file (local path or remote via SFTP)."""
+    if creds.is_local():
+        p = _local_path(remote_path)
+        if not p.is_file():
+            raise SshExecError(f"local file not found: {remote_path}")
+        return p.read_text(encoding="utf-8", errors="replace")
+
     own_client = client is None
     if own_client:
         client = connect(creds)
@@ -1309,7 +1599,7 @@ def read_file(
         finally:
             sftp.close()
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
 
 
@@ -1318,9 +1608,15 @@ def write_file(
     remote_path: str,
     content: str,
     *,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> None:
-    """Write string content to a remote path via SFTP (no BOM, no heredoc)."""
+    """Write string content to a host path (UTF-8, no BOM)."""
+    if creds.is_local():
+        p = _local_path(remote_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8", newline="\n")
+        return
+
     own_client = client is None
     if own_client:
         client = connect(creds)
@@ -1330,14 +1626,13 @@ def write_file(
             remote_dir = str(Path(remote_path).as_posix()).rsplit("/", 1)[0]
             if remote_dir and remote_dir != remote_path:
                 _ensure_remote_dir(sftp, remote_dir)
-            # Encode as UTF-8 without BOM; write as binary for paramiko safety
             data = content.encode("utf-8")
             with sftp.open(remote_path, "wb") as f:
                 f.write(data)
         finally:
             sftp.close()
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
 
 
@@ -1346,11 +1641,25 @@ def upload_file(
     local_path: str,
     remote_path: str,
     *,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> None:
-    """SFTP upload a local file. Creates remote parent dirs."""
+    """Upload/copy a local file to host path. Creates parent dirs."""
     if not os.path.isfile(local_path):
         raise FileNotFoundError(f"local not found: {local_path}")
+
+    if creds.is_local():
+        src = Path(local_path)
+        dst = _local_path(remote_path)
+        # no-op copy if same file
+        try:
+            if src.resolve() == dst.resolve():
+                return
+        except OSError:
+            pass
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(src), str(dst))
+        return
+
     own_client = client is None
     if own_client:
         client = connect(creds)
@@ -1365,7 +1674,7 @@ def upload_file(
         finally:
             sftp.close()
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
 
 
@@ -1374,9 +1683,23 @@ def download_file(
     remote_path: str,
     local_path: str,
     *,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> None:
-    """SFTP download a remote file to local."""
+    """Download/copy a host file to local_path."""
+    if creds.is_local():
+        src = _local_path(remote_path)
+        if not src.is_file():
+            raise SshExecError(f"local not found: {remote_path}")
+        local_p = Path(local_path)
+        local_p.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if src.resolve() == local_p.resolve():
+                return
+        except OSError:
+            pass
+        shutil.copy2(str(src), str(local_p))
+        return
+
     own_client = client is None
     if own_client:
         client = connect(creds)
@@ -1391,7 +1714,7 @@ def download_file(
         finally:
             sftp.close()
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
 
 
@@ -1422,9 +1745,9 @@ def upload_dir(
     *,
     exclude_dirs: set[str] | None = None,
     exclude_suffixes: set[str] | None = None,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> UploadDirResult:
-    """Recursively upload a local directory via SFTP (single connection)."""
+    """Recursively upload/copy a local directory to host path."""
     local_root = Path(local_dir).resolve()
     if not local_root.is_dir():
         raise FileNotFoundError(f"local dir not found: {local_dir}")
@@ -1432,17 +1755,46 @@ def upload_dir(
     ex_dirs = set(exclude_dirs or DEFAULT_EXCLUDE_DIR_NAMES)
     ex_suf = set(exclude_suffixes or DEFAULT_EXCLUDE_FILE_SUFFIXES)
     remote_root = remote_dir.replace("\\", "/").rstrip("/")
+    result = UploadDirResult()
+
+    if creds.is_local():
+        dst_root = _local_path(remote_root)
+        dst_root.mkdir(parents=True, exist_ok=True)
+        for dirpath, dirnames, filenames in os.walk(local_root):
+            dirnames[:] = [d for d in dirnames if d not in ex_dirs]
+            rel_dir = Path(dirpath).relative_to(local_root).as_posix()
+            if rel_dir == ".":
+                rel_dir = ""
+            for name in filenames:
+                rel = f"{rel_dir}/{name}" if rel_dir else name
+                rel = rel.replace("\\", "/")
+                if _should_exclude(rel, exclude_dirs=ex_dirs, exclude_suffixes=ex_suf):
+                    result.skipped += 1
+                    continue
+                local_file = Path(dirpath) / name
+                remote_file = dst_root / rel
+                remote_file.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    if local_file.resolve() == remote_file.resolve():
+                        result.skipped += 1
+                        continue
+                except OSError:
+                    pass
+                shutil.copy2(str(local_file), str(remote_file))
+                size = local_file.stat().st_size
+                result.uploaded += 1
+                result.bytes_sent += size
+                result.files.append(rel)
+        return result
 
     own_client = client is None
     if own_client:
         client = connect(creds)
-    result = UploadDirResult()
     try:
         sftp = client.open_sftp()
         try:
             _ensure_remote_dir(sftp, remote_root)
             for dirpath, dirnames, filenames in os.walk(local_root):
-                # prune excluded dirs in-place
                 dirnames[:] = [d for d in dirnames if d not in ex_dirs]
                 rel_dir = Path(dirpath).relative_to(local_root).as_posix()
                 if rel_dir == ".":
@@ -1467,12 +1819,12 @@ def upload_dir(
         finally:
             sftp.close()
     finally:
-        if own_client:
+        if own_client and client is not None:
             client.close()
     return result
 
 
-def _ensure_remote_dir(sftp: "paramiko.SFTPClient", remote_dir: str) -> None:
+def _ensure_remote_dir(sftp, remote_dir: str) -> None:
     """Recursively ensure a remote directory exists via SFTP. Idempotent."""
     if not remote_dir or remote_dir in (".", "/"):
         return
@@ -1491,7 +1843,6 @@ def _ensure_remote_dir(sftp: "paramiko.SFTPClient", remote_dir: str) -> None:
                 pass
 
 
-
 def remote_http_request(
     creds: Credentials,
     method: str,
@@ -1500,11 +1851,9 @@ def remote_http_request(
     headers: dict[str, str] | None = None,
     body: str | None = None,
     timeout: int = 60,
-    client: paramiko.SSHClient | None = None,
+    client=None,
 ) -> ExecResult:
-    """Run curl on the remote host (for dashboard bound to 127.0.0.1)."""
-    # Build a safe curl command. Body via stdin-ish: use --data-binary with printf
-    # For simplicity write body to a temp file when present.
+    """Run curl on the target host (for dashboard bound to 127.0.0.1)."""
     import base64
     import shlex
 
@@ -1547,7 +1896,23 @@ def invoke_shell_send(
 
     Use ONLY for commands that need terminal interaction (e.g. `astrbot init`
     with Y/n prompts). For normal commands use exec_command.
+
+    Local mode: best-effort non-interactive sequential exec (no PTY).
     """
+    if creds.is_local():
+        chunks: list[str] = []
+        timeout = max(30, int(read_timeout * 20))
+        for line in lines:
+            line = (line or "").rstrip("\n")
+            if not line:
+                continue
+            r = _local_exec(line, timeout=timeout)
+            if r.stdout:
+                chunks.append(r.stdout)
+            if r.stderr:
+                chunks.append(r.stderr)
+        return "".join(chunks)
+
     client = connect(creds)
     try:
         ch = client.invoke_shell()
@@ -1589,7 +1954,10 @@ if __name__ == "__main__":
         raise SystemExit(0)
     creds = load_credentials(explicit_path=args.login_config)
     if args.action in (None, "show-creds"):
-        print(f"host={creds.host} port={creds.port} user={creds.username} source={creds.source}")
+        print(
+            f"mode={creds.resolved_mode} requested={creds.runtime_mode} "
+            f"host={creds.host} port={creds.port} user={creds.username} source={creds.source}"
+        )
     elif args.action == "exec":
         r = exec_command(creds, args.command)
         print(r.stdout, end="")

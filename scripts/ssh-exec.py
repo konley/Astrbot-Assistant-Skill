@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-AstrBot Skill - SSH/SFTP/Log CLI (thin wrapper over _common.py).
+AstrBot Skill - Host ops CLI (local + SSH remote; thin wrapper over _common.py).
 
-CLI surface for remote ops. Connection/login.config/SFTP live in _common.py.
+CLI surface for diagnose/trace/log/service/sync. Transport chosen by
+login.config [runtime].mode (auto|local|remote). Connection/login.config
+live in _common.py.
 
 Usage (prefer absolute path to this script from skill root):
     python ssh-exec.py diagnose [--full]
@@ -426,6 +428,10 @@ def cmd_ls(creds: Credentials, remote: str, long: bool) -> int:
 
 def cmd_whoami(creds: Credentials) -> int:
     sys.stdout.write(f"skill_root={skill_root()}\n")
+    sys.stdout.write(
+        f"runtime.mode={getattr(creds, 'runtime_mode', 'auto')} "
+        f"resolved={getattr(creds, 'resolved_mode', 'remote')}\n"
+    )
     sys.stdout.write(f"credentials={creds}\n")
     sys.stdout.write(f"source={creds.source}\n")
     methods = []
@@ -433,7 +439,10 @@ def cmd_whoami(creds: Credentials) -> int:
         methods = creds.auth_methods()
     except Exception:
         methods = []
-    sys.stdout.write(f"auth_methods={','.join(methods) or 'unknown'}\n")
+    if creds.is_local():
+        sys.stdout.write("auth_methods=local-fs/subprocess\n")
+    else:
+        sys.stdout.write(f"auth_methods={','.join(methods) or 'unknown'}\n")
     identity = getattr(creds, "identity_file", "") or ""
     sys.stdout.write(f"identity_file={identity or '(none)'}\n")
     sys.stdout.write(f"github_url={getattr(creds, 'github_url', '')}\n")
@@ -525,7 +534,7 @@ def cmd_trace(
     lines_per_step: int,
     as_json: bool,
 ) -> int:
-    """One-shot message-flow pipeline check (single SSH connection)."""
+    """One-shot message-flow pipeline check (single host session)."""
     client = connect(creds)
     try:
         report = []
@@ -887,6 +896,14 @@ def cmd_tunnel(
     forwards: LOCAL:REMOTE_PORT or NAME=LOCAL:REMOTE_PORT
     Default if empty: dashboard + napcat webui.
     """
+    if creds.is_local():
+        dash = getattr(creds, "dashboard_port", None) or 6185
+        sys.stdout.write(
+            "# tunnel not needed in local mode (already on the robot host)\n"
+            f"# dashboard: http://127.0.0.1:{int(dash)}\n"
+            "# napcat webui: check login.config / napcat config (often :6099)\n"
+        )
+        return 0
     action = (action or "print").strip().lower()
     items: list[tuple[str, int, int]] = []
     if not forwards:
@@ -1151,7 +1168,7 @@ def _add_cred_args(p: argparse.ArgumentParser) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(
-        description="SSH/SFTP/Log CLI for AstrBot skill (wraps _common.py).",
+        description="Host ops CLI for AstrBot skill (local + SSH; wraps _common.py).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Profiles for log --profile: " + ", ".join(LOG_PROFILES) + "\n"
@@ -1204,9 +1221,9 @@ def main() -> int:
     s_ls.add_argument("remote")
     s_ls.add_argument("-l", "--long", action="store_true")
 
-    sub.add_parser("whoami", help="print skill root, creds source, remote identity")
+    sub.add_parser("whoami", help="print skill root, runtime mode, creds, host identity")
 
-    s_batch = sub.add_parser("batch", help="run multiple commands on one SSH connection")
+    s_batch = sub.add_parser("batch", help="run multiple commands on one host session")
     s_batch.add_argument("commands", nargs="*", help="commands as separate args")
     s_batch.add_argument("--file", dest="file_path", help="file with one command per line")
     s_batch.add_argument("--stdin", action="store_true")
@@ -1238,7 +1255,7 @@ def main() -> int:
 
     s_sp = sub.add_parser(
         "sync-plugin",
-        help="upload local plugin dir; remote root auto-resolves login.config / modern addons/plugins / legacy data/plugins",
+        help="sync local plugin dir to host plugins root (login.config / modern addons/plugins / legacy data/plugins)",
     )
     s_sp.add_argument("local_dir")
     s_sp.add_argument("--name", help="remote plugin folder name (default: local dir name)")

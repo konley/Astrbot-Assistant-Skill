@@ -1,6 +1,6 @@
 # AstrBot Assistant Skill
 
-面向 **AstrBot 远程运维 + 插件工程** 的 Codex/Agent Skill：把易错操作收成 CLI，把排障路径写成契约。
+面向 **AstrBot 主机运维（local + remote）+ 插件工程** 的 Codex/Agent Skill：把易错操作收成 CLI，把排障路径写成契约。
 
 > Agent 入口：[`SKILL.md`](./SKILL.md)  
 > 人类快速上手：本文 + `references/`
@@ -9,16 +9,18 @@
 
 1. 克隆或拷贝本目录到任意路径  
 2. 链接/拷贝到 Codex skills 目录（或配置 skill 搜索路径）  
-3. `pip install paramiko`（远程工具依赖）  
-4. 生成凭据：
+3. 远程模式需要：`pip install paramiko`（local 模式可不装）  
+4. 生成凭据并选择模式：
 
 ```powershell
 python scripts/ssh-exec.py init-config
-# 编辑 login.config（不要提交 git）
+# 编辑 login.config：
+#   [runtime] mode = local   # 机器人主机
+#   [runtime] mode = remote  # 开发机 SSH
 python scripts/ssh-exec.py whoami
 ```
 
-可选环境变量：`ASTRBOT_SKILL_ROOT`、`ASTRBOT_LOGIN_CONFIG`、`ASTRBOT_SSH_IDENTITY`、`ASTRBOT_SSH_PASSWORD`。
+可选环境变量：`ASTRBOT_SKILL_ROOT`、`ASTRBOT_LOGIN_CONFIG`、`ASTRBOT_RUNTIME_MODE`、`ASTRBOT_SSH_IDENTITY`、`ASTRBOT_SSH_PASSWORD`。
 
 ## 目录
 
@@ -43,7 +45,8 @@ python "$A\ssh-exec.py" service status
 python "$A\ssh-exec.py" tunnel print
 python "$A\ssh-exec.py" framework check
 python "$A\config-tool.py" get platform.0
-python "$A\astrbot-api.py" --via-ssh plugins list
+python "$A\astrbot-api.py" plugins list          # local
+python "$A\astrbot-api.py" --via-ssh plugins list # remote
 python "$A\plugin-scaffold.py" --from-login-config --name astrbot_plugin_demo --desc "demo"
 # optional lifecycle: add --with-lifecycle
 python "$A\plugin-check.py" .\astrbot_plugin_demo
@@ -72,7 +75,7 @@ python scripts/ssh-exec.py framework sync --yes
 
 | 场景 | 文档 |
 |------|------|
-| 远程排障 | `references/remote-ops-playbook.md` |
+| 主机运维（local/remote） | `references/remote-ops-playbook.md` |
 | 插件开发 | `references/plugin-dev-playbook.md` |
 | API 速查 | `references/api-cheatsheet.md` |
 | Agent / Tools | `references/agent-tools.md` |

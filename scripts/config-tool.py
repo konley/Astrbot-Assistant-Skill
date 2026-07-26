@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-AstrBot Skill - Remote cmd_config.json read/modify/write CLI.
+AstrBot Skill - Host cmd_config.json read/modify/write CLI (local + remote).
 
 Editing cmd_config.json correctly is a recurring task (port / platform /
 provider / persona / toggles). Doing it with sed is forbidden (breaks JSON
 quoting — see references/debug-handbook.md §5). This CLI enforces the safe
-parse → modify → dump → SFTP-write pipeline with one command.
+parse → modify → dump → write pipeline with one command.
 
 Pipeline (always):
-    1. SFTP-read remote /opt/astrbot/data/cmd_config.json
+    1. Read host /opt/astrbot/data/cmd_config.json (local FS or SFTP)
     2. json.loads → dict
     3. apply get / set / patch / unset
     4. (only on set/patch/unset) json.dumps(indent=2, ensure_ascii=False)
-       → SFTP-write back, NO BOM, atomic via SFTP open('w')
+       → write back, NO BOM
 
 Keys are dotted paths: "dashboard.port", "platform.0.ws_reverse_port",
 "provider.0.id". Array indices accepted as integers in the path: "platform.0".
@@ -308,7 +308,7 @@ def main() -> int:
     s_unset = sub.add_parser("unset", help="delete a key")
     s_unset.add_argument("key")
 
-    s_bak = sub.add_parser("backup", help="SFTP-download a backup copy")
+    s_bak = sub.add_parser("backup", help="download a backup copy from host")
     s_bak.add_argument("--local", default="cmd_config.bak.json")
 
     args = p.parse_args()
@@ -346,7 +346,7 @@ def main() -> int:
         if args.action == "backup":
             return cmd_backup(creds, args.path, args.local)
     except SshExecError as e:
-        sys.stderr.write(f"SSH error: {e}\n")
+        sys.stderr.write(f"host error: {e}\n")
         return 1
     except KeyError as e:
         sys.stderr.write(f"key error: {e}\n")

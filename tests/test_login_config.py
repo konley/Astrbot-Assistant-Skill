@@ -12,6 +12,7 @@ from _common import (  # noqa: E402
     PathLayout,
     SshConfigError,
     parse_login_config,
+    resolve_runtime_mode,
     write_login_config_template,
 )
 
@@ -40,6 +41,7 @@ def test_parse_password_ini(tmp_path: Path):
     assert c.host == "1.1.1.1"
     assert c.auth_methods() == ["password"]
     assert c.password == "secret-pass"
+    assert c.resolved_mode == "remote"
 
 
 def test_parse_identity_ini(tmp_path: Path):
@@ -91,7 +93,44 @@ def test_template_write(tmp_path: Path):
     out = write_login_config_template(path=target, fmt="ini", force=True)
     assert out.is_file()
     body = out.read_text(encoding="utf-8")
-    assert "[ssh]" in body and "[paths]" in body and "identity_file" in body
+    assert "[ssh]" in body and "[paths]" in body and "[runtime]" in body and "identity_file" in body
+
+
+
+def test_parse_local_mode_without_ssh(tmp_path: Path):
+    cfg = tmp_path / "login.config"
+    cfg.write_text(
+        "[runtime]\nmode=local\n"
+        "[git]\nuser=yourname\nemail=a@b.c\ngithub=https://github.com/yourname\n"
+        "[paths]\nastrbot_root=/opt/astrbot\n",
+        encoding="utf-8",
+    )
+    c = parse_login_config(cfg)
+    assert c.runtime_mode == "local"
+    assert c.resolved_mode == "local"
+    assert c.is_local()
+    assert c.paths.astrbot_root == "/opt/astrbot"
+
+
+def test_parse_runtime_remote_explicit(tmp_path: Path):
+    cfg = tmp_path / "login.config"
+    cfg.write_text(
+        "[runtime]\nmode=remote\n"
+        "[ssh]\nhost=9.9.9.9\nuser=root\npassword=secret-pass\n",
+        encoding="utf-8",
+    )
+    c = parse_login_config(cfg)
+    assert c.resolved_mode == "remote"
+    assert c.host == "9.9.9.9"
+
+
+def test_template_has_runtime_section(tmp_path: Path):
+    target = tmp_path / "login.config"
+    out = write_login_config_template(path=target, fmt="ini", force=True)
+    body = out.read_text(encoding="utf-8")
+    assert "[runtime]" in body
+    assert "mode = auto" in body
+
 
 
 if __name__ == "__main__":
@@ -104,4 +143,7 @@ if __name__ == "__main__":
     test_parse_json_key_and_paths(tmp)
     test_incomplete_raises(tmp)
     test_template_write(tmp)
+    test_parse_local_mode_without_ssh(tmp)
+    test_parse_runtime_remote_explicit(tmp)
+    test_template_has_runtime_section(tmp)
     print("test_login_config: PASS")

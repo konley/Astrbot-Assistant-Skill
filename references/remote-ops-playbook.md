@@ -1,23 +1,33 @@
-# Remote Ops Playbook（Windows 本机 → SSH 远端）
+# Host Ops Playbook（local 本机直连 + remote SSH）
 
-**唯一远程作战手册。** 全局硬约束见 `SKILL.md`「硬约束」清单（此处不重复展开）。 排障/同步/API 先读本文，再按需打开 `debug-handbook.md`。
+**唯一主机作战手册。** 全局硬约束见 `SKILL.md`「硬约束」清单（此处不重复展开）。排障/同步/API 先读本文，再按需打开 `debug-handbook.md`。
 
 ## 0. 硬契约（违反即浪费 token）
 
 1. **禁止**为一次性任务新建 paramiko / 临时 `.py` 脚本。
-2. 远程操作只用：`ssh-exec.py` / `config-tool.py` / `astrbot-api.py --via-ssh`。
-3. 需要多命令 → `ssh-exec.py batch` 或 `diagnose` / `trace`（单连接）。
+2. 主机操作只用：`ssh-exec.py` / `config-tool.py` / `astrbot-api.py`（remote 时加 `--via-ssh`）。
+3. 需要多命令 → `ssh-exec.py batch` 或 `diagnose` / `trace`（单会话）。
 4. 改 JSON → `config-tool.py`（禁止 sed / 手工拼 JSON 字符串写回）。
 5. 长文件内容 → `write --file` / `upload` / `upload-dir` / `sync-plugin`（禁止 `write` 内联大段 argv）。
-6. 本地有插件源码 → 本地 `read`/`edit`，再用 `sync-plugin` 同步；不要远程 cat 改业务代码。
+6. 插件源码 → 在 git 项目目录 `read`/`edit`，再用 `sync-plugin` 同步到运行目录。
 7. 调用时优先用 **skill 内 scripts 的绝对路径**，避免 cwd 漂移。
+8. 先 `whoami` 看 `resolved=local|remote`，再选 API 是否加 `--via-ssh`。
 
-### 推荐调用模板（PowerShell）
+### runtime 模式
+
+| mode | 适用 | 传输 |
+|------|------|------|
+| `local` | skill 跑在机器人主机 | 本机 subprocess + 文件系统 + localhost HTTP |
+| `remote` | skill 跑在开发机 | SSH/SFTP + `--via-ssh` curl |
+| `auto` | 不确定 | 本机发现 AstrBot 路径 → local；否则 SSH 齐全 → remote |
+
+配置：`login.config [runtime].mode` 或环境变量 `ASTRBOT_RUNTIME_MODE`。
+
+### 推荐调用模板（PowerShell / remote 开发机）
 
 ```powershell
-# 将 skill 根设为环境变量（推荐），避免写死本机路径
 $env:ASTRBOT_SKILL_ROOT = "<path-to>/Astrbot-Assistant-Skill"
-# $env:ASTRBOT_LOGIN_CONFIG = "<path-to>/login.config"
+# $env:ASTRBOT_RUNTIME_MODE = "remote"
 $S = $env:ASTRBOT_SKILL_ROOT
 $A = Join-Path $S "scripts"
 
@@ -31,13 +41,27 @@ python "$A\config-tool.py" get platform.0
 python "$A\astrbot-api.py" --via-ssh plugins list
 ```
 
+### 推荐调用模板（Linux / local 机器人主机）
+
+```bash
+export ASTRBOT_SKILL_ROOT="<path-to>/Astrbot-Assistant-Skill"
+# export ASTRBOT_RUNTIME_MODE=local
+A="$ASTRBOT_SKILL_ROOT/scripts"
+
+python "$A/ssh-exec.py" whoami          # 应显示 resolved=local
+python "$A/ssh-exec.py" diagnose --full
+python "$A/ssh-exec.py" trace --since "30 min ago"
+python "$A/config-tool.py" get platform.0
+python "$A/astrbot-api.py" plugins list  # 无需 --via-ssh
+```
+
 > 首次使用：`python scripts/ssh-exec.py init-config` 生成带注释 INI 模板（也支持 `--format json`）。
 > `login.config` 搜索顺序：`--login-config` → `$ASTRBOT_LOGIN_CONFIG` → cwd 向上 → skill 根向上。  
 > 失败时 stderr 会打印 **Searched:** 列表，不要猜 host。
 
 ---
 
-## 1. 标准开局（任何远程问题）
+## 1. 标准开局（任何主机问题）
 
 ```powershell
 python "$A\ssh-exec.py" whoami

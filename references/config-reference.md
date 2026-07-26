@@ -1,5 +1,19 @@
 # 配置文件参考
 
+## login.config runtime 模式
+
+| 字段 | 说明 |
+|------|------|
+| `[runtime].mode` | `auto` / `local` / `remote` |
+| `ASTRBOT_RUNTIME_MODE` | 环境变量覆盖文件中的 mode |
+
+- **local**：skill 与 AstrBot 同机，直接文件系统 + journalctl + `http://127.0.0.1:<dashboard.port>`
+- **remote**：经 SSH/SFTP；API 使用 `astrbot-api.py --via-ssh`
+- **auto**：本机存在 `[paths]`/`/opt/astrbot` 等标记 → local；否则 SSH 凭据齐全 → remote
+
+`[paths]` 在两种模式下语义相同，只是目标主机不同（本机路径 vs 远端路径）。
+
+
 ## AstrBot
 
 ### 安装路径

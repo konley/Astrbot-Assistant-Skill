@@ -1,9 +1,11 @@
 interface:
   display_name: "AstrBot Assistant"
-  short_description: "Remote ops, debug, and compliant plugin workflow for AstrBot"
+  short_description: "Host ops (local/remote), debug, and compliant plugin workflow for AstrBot"
   default_prompt: |
     Use the astrbot-assistant skill. Prefer scripts/ CLIs (ssh-exec, config-tool,
-    astrbot-api, plugin-scaffold/check, git-identity). Start remote work with
-    whoami + diagnose; for no-reply use trace. Align local AstrBot source cache
-    with remote via framework check before relying on framework APIs;
-    never invent APIs from a mismatched or unpinned local cache.
+    astrbot-api, plugin-scaffold/check, git-identity). Start host work with
+    whoami (confirm runtime mode local|remote) + diagnose; for no-reply use trace.
+    local mode: direct filesystem/journalctl/localhost API (no --via-ssh).
+    remote mode: SSH/SFTP and astrbot-api --via-ssh.
+    Align local AstrBot source cache with host runtime via framework check before
+    relying on framework APIs; never invent APIs from a mismatched or unpinned cache.

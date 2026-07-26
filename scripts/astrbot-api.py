@@ -22,7 +22,11 @@ Dashboard port resolution for --via-ssh (first set wins):
 
 Transport modes:
   1) Direct HTTP to --base-url (default http://localhost:6185)
+     Preferred when login.config [runtime].mode=local (skill on robot host).
   2) --via-ssh: remote curl against 127.0.0.1:<dash-port> via login.config / _common
+     Preferred when runtime.mode=remote (skill on a laptop).
+  3) Auto: if --via-ssh not set and resolved mode is remote, still default to
+     direct HTTP (backward compatible). Pass --via-ssh for remote loopback.
 
 Usage:
     python astrbot-api.py plugins list
@@ -615,11 +619,32 @@ def main() -> int:
 
     socket.setdefaulttimeout(args.timeout)
 
-    # Load optional/required login.config for dashboard settings
+    # Load optional/required login.config for dashboard settings + runtime mode
     cfg_key = ""
     cfg_port = None
     config_source = ""
-    if args.via_ssh:
+    # Prefer full credential load so runtime.mode is available; fall back soft.
+    _creds, cfg_key, cfg_port, config_source = load_dashboard_settings(
+        args.login_config,
+        host=args.host,
+        port=args.port,
+        user=args.user,
+        password=args.password,
+        need_ssh=False,
+    )
+    resolved_mode = "remote"
+    if _creds is not None:
+        resolved_mode = getattr(_creds, "resolved_mode", None) or "remote"
+        # If full parse was soft-failed earlier without mode, try proper load when via-ssh
+    via_ssh = bool(args.via_ssh)
+    if via_ssh and resolved_mode == "local":
+        sys.stderr.write(
+            "[astrbot-api] note: runtime.mode=local — ignoring --via-ssh, "
+            "using direct HTTP to loopback dashboard\n"
+        )
+        via_ssh = False
+    if via_ssh:
+        # Ensure SSH-ready credentials (raises clearly if incomplete)
         _creds, cfg_key, cfg_port, config_source = load_dashboard_settings(
             args.login_config,
             host=args.host,
@@ -628,11 +653,7 @@ def main() -> int:
             password=args.password,
             need_ssh=True,
         )
-    else:
-        _creds, cfg_key, cfg_port, config_source = load_dashboard_settings(
-            args.login_config,
-            need_ssh=False,
-        )
+        resolved_mode = getattr(_creds, "resolved_mode", "remote") or "remote"
 
     api_key = resolve_api_key(args.api_key, cfg_key)
     dash_port = resolve_dash_port(args.dash_port, cfg_port)
@@ -640,7 +661,7 @@ def main() -> int:
     # Base URL: if user left default and config has port, and not via-ssh, adjust local default
     base_url = args.base_url
     if (
-        not args.via_ssh
+        not via_ssh
         and base_url.rstrip("/") in (DEFAULT_BASE_URL, "http://127.0.0.1:6185")
         and cfg_port is not None
         and args.dash_port is None
@@ -655,12 +676,12 @@ def main() -> int:
             f"(--api-key / ${ENV_API_KEY} / login.config [dashboard].api_key)\n"
             "If the next call returns 401, fill [dashboard] api_key. "
             f"See help below after failure.\n"
-            f"[astrbot-api] dash-port={dash_port} via_ssh={args.via_ssh} "
+            f"[astrbot-api] mode={resolved_mode} dash-port={dash_port} via_ssh={via_ssh} "
             f"key={_mask_key(api_key)} config={config_source or '(none)'}\n"
         )
     else:
         sys.stderr.write(
-            f"[astrbot-api] dash-port={dash_port} via_ssh={args.via_ssh} "
+            f"[astrbot-api] mode={resolved_mode} dash-port={dash_port} via_ssh={via_ssh} "
             f"key={_mask_key(api_key)} config={config_source or '(flags/env)'}\n"
         )
 
@@ -668,7 +689,7 @@ def main() -> int:
         base_url=base_url,
         api_key=api_key or None,
         timeout=args.timeout,
-        via_ssh=args.via_ssh,
+        via_ssh=via_ssh,
         dash_port=dash_port,
         login_config=args.login_config,
         host=args.host,

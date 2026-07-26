@@ -11,8 +11,8 @@
 | `plugin-check.py` | 元数据/logo/repo/BOM/@register/logger 检查；`--bump` 升版 |
 | `git-identity.py` | 锁定 login.config 个人身份：`show` / `status` / `fix` / `check-push` |
 | `logo-process.py` | logo 处理（可选） |
-| `ssh-exec.py sync-plugin` | 本地 → 远端插件目录同步 |
-| `astrbot-api.py --via-ssh` | 远端 plugins install/reload/list |
+| `ssh-exec.py sync-plugin` | 本地 → host 插件目录同步 |
+| `astrbot-api.py` / `--via-ssh` | plugins install/reload/list（local 直连，remote 加 --via-ssh） |
 
 路径一律优先 **scripts 绝对路径**（`$env:ASTRBOT_SKILL_ROOT\scripts\...`）。
 
@@ -85,7 +85,7 @@ python scripts/plugin-scaffold.py \
 
 - 通用 API 速查：`api-cheatsheet.md`（先 `framework check`）
 - Tool / tool_loop / cron / subagent / Agent hooks：`agent-tools.md`
-- 远程排障仍走 `remote-ops-playbook.md`，不要用开发文档替代运维契约
+- 主机排障仍走 `remote-ops-playbook.md`，不要用开发文档替代运维契约
 
 ### 2.2.2 可观测日志契约（新建默认启用）
 
@@ -119,6 +119,9 @@ python scripts/plugin-check.py ./astrbot_plugin_example
 
 ```bash
 python scripts/ssh-exec.py sync-plugin ./astrbot_plugin_example --name astrbot_plugin_example
+# local:
+python scripts/astrbot-api.py plugins reload --name astrbot_plugin_example
+# remote:
 python scripts/astrbot-api.py --via-ssh plugins reload --name astrbot_plugin_example
 ```
 
