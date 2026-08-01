@@ -109,23 +109,30 @@ cn_description: >-
 
 ## 工具入口（scripts/）
 
+**首选统一入口 `astrobot.py`**（薄转发，兼容旧脚本，新人从 QUICKSTART 开始）：
+
+| 统一入口 | 用途 |
+|----------|------|
+| `astrobot.py ops whoami\|log\|trace\|diagnose\|service\|framework\|sync-plugin…` | 全部主机运维（转发 ssh-exec.py） |
+| `astrobot.py api plugins\|chat\|config\|im…` | OpenAPI：插件生命周期 / Chat / IM / 配置（local 直连，remote 加 `--via-ssh`） |
+| `astrobot.py config get\|set\|patch\|backup` | 安全改 cmd_config / data/config（转发 config-tool.py） |
+| `astrobot.py plugin new\|check` | 脚手架 / 合规（plugin-scaffold.py / plugin-check.py） |
+| `astrobot.py git …` | 个人身份门禁（git-identity.py） |
+| `astrobot.py doctor` | 只读环境体检 + **config_drift 配置漂移检测** |
+| `astrobot.py heal --yes` | **自愈**：服务启动失败且命中 urllib3/requests 依赖损坏 → `uv tool upgrade --reinstall` + 重启 + 验证 |
+| `astrobot.py version` | 框架版本 pin 缓存 vs host runtime（= `framework check`） |
+
+**底层脚本（仍可用，被统一入口转发）**：
+
 | 命令 | 用途 |
 |------|------|
-| `ssh-exec.py whoami` | 校验 runtime 模式 / 凭据 / 路径 |
-| `ssh-exec.py diagnose [--full]` | 开局体检（含 runtime 版本探测） |
-| `ssh-exec.py trace` | 消息流 5 步 |
-| `ssh-exec.py service …` | systemd 巡检/enable/logs（restart 需 --yes） |
+| `ssh-exec.py service …` | systemd 巡检/enable/logs/restart/heal（restart/heal 需 --yes） |
 | `ssh-exec.py tunnel print\|open` | remote：本地端口转发；local：提示不需要 |
-| `ssh-exec.py framework check\|sync` | 版本 pin 缓存 vs host runtime（禁 latest fallback） |
 | `ssh-exec.py config discover [--write]` | 探测主机布局并建议/回填 login.config [paths]/port |
-| `ssh-exec.py sync-plugin` | 插件同步到 host plugins 根（login.config → modern → legacy 自动回退） |
-| `config-tool.py` | 安全改 cmd_config / data/config |
-| `astrbot-api.py` / `--via-ssh` | OpenAPI：插件、Chat、IM、文件、Skills、MCP（local 直连，remote 用 --via-ssh） |
-| `doctor.py` | 只读检查 Python、依赖、runtime、路径和框架缓存 |
+| `ssh-exec.py framework check\|sync` | 版本 pin 缓存 vs host runtime（禁 latest fallback） |
+| `doctor.py` | 只读检查 Python、依赖、runtime、路径、框架缓存和配置漂移 |
 | `market-check.py` | 插件元数据、市场 JSON、16MB 发布包检查 |
 | `backup-tool.py` | 用户确认后创建本地 AstrBot 数据归档 |
-| `plugin-scaffold.py` / `plugin-check.py` | 脚手架 / 合规 |
-| `git-identity.py` | 个人身份门禁 |
 
 ## 路径基线（可配置）
 
@@ -209,7 +216,8 @@ astrbot_root = /opt/astrbot
 | `openapi-integration.md` | API 鉴权 |
 | `compliance-checklist.md` | 交付合规 |
 | `troubleshooting.md` | 边缘案例 |
-| `modern-runtime.md` | uv/Docker/Compose/当前路径与升级 |
+| `QUICKSTART.md` | 维护人最短上手路径（whoami→日志/更新/插件三件事+硬规矩） |
+| `modern-runtime.md` | uv/Docker/Compose/当前路径与升级（含更新后 urllib3 自愈） |
 | `skills-sandbox-mcp.md` | Runtime Skills、Sandbox、MCP、主动 Agent |
 | `backup-recovery.md` | 实例备份与恢复 |
 

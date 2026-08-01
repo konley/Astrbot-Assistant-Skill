@@ -837,9 +837,11 @@ def cmd_service(
     since: str | None,
     yes: bool,
 ) -> int:
-    """systemd helpers: status|logs|enable|disable|restart|start|stop."""
+    """systemd helpers: status|logs|enable|disable|restart|start|stop|heal."""
     target = _resolve_unit(creds, unit or "astrbot")
     action = (action or "").strip().lower()
+    if action == "heal":
+        return cmd_service_heal(creds, target, yes)
     if action in ("status", "st"):
         cmd = f"systemctl status {_shell_quote(target)} --no-pager -l 2>&1 | head -40"
     elif action in ("logs", "log"):
@@ -878,10 +880,89 @@ def cmd_service(
     else:
         sys.stderr.write(
             f"unknown service action: {action}. "
-            "Use status|logs|enable|disable|restart|start|stop|reload\n"
+            "Use status|logs|enable|disable|restart|start|stop|reload|heal\n"
         )
         return 2
     return cmd_exec(creds, cmd, timeout=120)
+
+
+def _find_uv_path(creds: Credentials) -> str:
+    """Locate uv on the host: python_bin's uv sibling, then common candidates."""
+    p = _paths(creds)
+    python_bin = ""
+    if p and getattr(p, "python_bin", None):
+        python_bin = str(p.python_bin).strip()
+    candidates: list[str] = []
+    if python_bin:
+        candidates.append(str(Path(python_bin).resolve().parents[2] / "bin" / "uv"))
+        candidates.append(str(Path(python_bin).resolve().parents[3] / ".local" / "bin" / "uv"))
+    candidates += ["~/.local/bin/uv", "/root/.local/bin/uv", "uv"]
+    r = exec_command(
+        creds,
+        "for c in " + " ".join(_shell_quote(c) for c in candidates) + "; do "
+        "command -v \"$c\" >/dev/null 2>&1 && { echo \"$c\"; break; }; done",
+        timeout=30,
+    )
+    uv = (r.stdout or "").strip().splitlines()
+    return uv[0] if uv else "uv"
+
+
+def cmd_service_heal(creds: Credentials, target: str, yes: bool) -> int:
+    """Self-heal a broken AstrBot service.
+
+    Detects the classic uv-tool upgrade failure (urllib3/requests package
+    files missing after `uv tool upgrade`), re-installs astrbot, restarts the
+    unit, and verifies the running process is clean.
+    """
+    if not yes:
+        sys.stderr.write("service heal requires --yes (may reinstall astrbot and restart).\n")
+        return 2
+    status = exec_command(
+        creds, f"systemctl is-active {_shell_quote(target)}", timeout=30
+    )
+    active = (status.stdout or "").strip()
+    if active == "active":
+        sys.stdout.write(f"service {target}: already active, nothing to heal.\n")
+        return 0
+
+    sys.stdout.write(f"service {target}: not active ({active!r}). Checking for dependency break...\n")
+    probe = exec_command(
+        creds,
+        "journalctl -u {0} --no-pager -n 300 2>/dev/null | "
+        "grep -m1 -E \"No module named 'urllib3'|requests library is not installed|ModuleNotFoundError\" || true".format(
+            _shell_quote(target)
+        ),
+        timeout=30,
+    )
+    if "urllib3" not in (probe.stdout or "") and "requests library is not installed" not in (probe.stdout or ""):
+        sys.stderr.write(
+            f"service {target}: failed but no urllib3/requests signature found. "
+            "Manual diagnosis needed (see `service status`/`log`). Not auto-healing.\n"
+        )
+        return 3
+
+    sys.stdout.write("urllib3/requests dependency break detected. Reinstalling astrbot (uv tool upgrade --reinstall)...\n")
+    uv = _find_uv_path(creds)
+    sys.stdout.write(f"uv binary: {uv}\n")
+    rr = exec_command(creds, f"{_shell_quote(uv)} tool upgrade --reinstall astrbot 2>&1 | tail -8", timeout=600)
+    if not rr.ok:
+        sys.stderr.write(f"reinstall failed:\n{rr.stdout}{rr.stderr}\n")
+        return 1
+    sys.stdout.write(rr.stdout)
+
+    sys.stdout.write("Restarting service...\n")
+    rs = exec_command(
+        creds,
+        f"systemctl restart {_shell_quote(target)} && "
+        f"systemctl is-active {_shell_quote(target)}",
+        timeout=120,
+    )
+    sys.stdout.write(rs.stdout)
+    if (rs.stdout or "").strip() != "active":
+        sys.stderr.write(f"restart did not reach active:\n{rs.stdout}{rs.stderr}\n")
+        return 1
+    sys.stdout.write(f"service {target}: active after heal.\n")
+    return 0
 
 
 def cmd_tunnel(
@@ -1292,7 +1373,7 @@ def main() -> int:
     )
     s_svc.add_argument(
         "svc_action",
-        choices=["status", "logs", "enable", "disable", "restart", "start", "stop", "reload"],
+        choices=["status", "logs", "enable", "disable", "restart", "start", "stop", "reload", "heal"],
     )
     s_svc.add_argument(
         "--unit",

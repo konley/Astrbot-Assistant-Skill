@@ -14,6 +14,48 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from _common import SshConfigError, load_credentials  # noqa: E402
 
 
+def _probe_drift(creds) -> list[dict]:
+    """Detect login.config path/setup values that no longer match the host.
+
+    Returns a list of {key, current, discovered, action}. Empty when aligned.
+    """
+    try:
+        from config_discover import build_report, probe_remote  # type: ignore[import-not-found]
+    except Exception as exc:
+        return [
+            {
+                "key": "_error",
+                "current": "",
+                "discovered": "",
+                "action": f"config_discover import failed: {exc}",
+            }
+        ]
+    try:
+        remote = probe_remote(creds)
+        report = build_report(creds, remote)
+    except Exception as exc:
+        return [
+            {
+                "key": "_error",
+                "current": "",
+                "discovered": "",
+                "action": f"probe failed: {exc}",
+            }
+        ]
+    drift = []
+    for field in report.advice:
+        if field.action in ("fill", "update"):
+            drift.append(
+                {
+                    "key": f"{field.section}.{field.key}",
+                    "current": field.current,
+                    "discovered": field.discovered,
+                    "action": field.action,
+                }
+            )
+    return drift
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Read-only AstrBot skill doctor")
     parser.add_argument("--login-config")
@@ -48,6 +90,8 @@ def main() -> int:
         }
     except SshConfigError as exc:
         checks["runtime_error"] = str(exc)
+    else:
+        checks["config_drift"] = _probe_drift(creds)
 
     if args.as_json:
         print(json.dumps(checks, ensure_ascii=False, indent=2))
