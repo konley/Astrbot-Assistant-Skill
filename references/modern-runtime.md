@@ -31,10 +31,19 @@ data/backups/
 
 ## 更新
 
-uv 部署不支持 WebUI 升级：
+uv 部署不支持 WebUI 升级（WebUI 的 `/api/update_project` 会报 "please use `pip` or `uv tool upgrade`"，属预期，忽略即可）：
 
 ```bash
 uv tool upgrade astrbot --python 3.12
 ```
 
-升级前先备份配置、插件配置、插件数据、Skills 和知识库；升级后执行 `framework check`、插件 reload 和日志检查。
+升级前先备份配置、插件配置、插件数据、Skills 和知识库；升级后执行 `framework check`、插件 reload 和日志检查。升级是改生产环境，须用户确认 + `--yes`。
+
+## 更新后故障排查
+
+- 升级后服务启动失败，报 `ModuleNotFoundError: No module named 'urllib3'`（或 "The requests library is not installed"）：升级常残留损坏的包安装（只剩 dist-info、包文件缺失）。修复：
+  ```bash
+  uv tool upgrade --reinstall astrbot   # 注意不是 --force，uv 无该参数
+  ```
+  重装后验证 `uv tool python` 环境能导入 urllib3/requests，再 `service restart --yes`。
+- 日志会短暂混杂旧失败进程的 Traceback（PID 与当前不同）；确认当前进程（`service status` 的 Main PID）无 `[ERRO]`/Traceback 再判定恢复。
