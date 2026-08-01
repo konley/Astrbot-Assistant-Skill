@@ -27,7 +27,7 @@ def _creds(plugins_dir: str | None = None, data_dir: str | None = None, root: st
     paths = SimpleNamespace(
         astrbot_root=root,
         data_dir=data_dir or f"{root}/data",
-        plugins_dir=plugins_dir or f"{(data_dir or f'{root}/data')}/addons/plugins",
+        plugins_dir=plugins_dir or f"{(data_dir or f'{root}/data')}/plugins",
     )
     return SimpleNamespace(paths=paths)
 
@@ -35,9 +35,9 @@ def _creds(plugins_dir: str | None = None, data_dir: str | None = None, root: st
 def test_candidates_order_default():
     mod = _load_ssh_exec()
     c = mod.plugin_root_candidates(_creds())
-    assert c[0] == "/opt/astrbot/data/addons/plugins"
+    assert c[0] == "/opt/astrbot/data/plugins"
     assert "/opt/astrbot/data/plugins" in c
-    assert c.index("/opt/astrbot/data/addons/plugins") < c.index("/opt/astrbot/data/plugins")
+    assert c.index("/opt/astrbot/data/plugins") < c.index("/opt/astrbot/data/addons/plugins")
 
 
 def test_candidates_override_first():

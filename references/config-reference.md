@@ -25,17 +25,17 @@
 | 工作目录 | `/opt/astrbot/` |
 | 数据目录 | `/opt/astrbot/data/` |
 | 主配置文件 | `/opt/astrbot/data/cmd_config.json` |
-| 插件安装目录 | `/opt/astrbot/data/addons/plugins/{plugin_name}/` |
-| 插件配置目录 | `/opt/astrbot/data/plugin_configs/` |
+| 插件安装目录 | `/opt/astrbot/data/plugins/{plugin_name}/` |
+| 插件配置目录 | `/opt/astrbot/data/config/{plugin_name}_config.json` |
 | 插件数据 | `/opt/astrbot/data/plugin_data/{plugin_name}/` |
 | uv 安装位置 | `/root/.local/share/uv/tools/astrbot/` |
 | uv Python 解释器 | `/root/.local/share/uv/tools/astrbot/bin/python` |
 | astrbot 命令 | `/root/.local/bin/astrbot` |
 | systemd 服务 | `/etc/systemd/system/astrbot.service` |
 
-> ⚠️ 新版默认 `data/addons/plugins/`；不少线上实例仍是历史 `data/plugins/`。
+> 当前官方默认 `data/plugins/`；历史实例可能使用 `data/addons/plugins/`。
 > `sync-plugin` / `diagnose` 解析顺序：`--remote-root` → `login.config [paths].plugins_dir` → 远端存在的 modern/legacy 候选。
-> 建议先 `ssh-exec.py config discover --write` 把真实路径写回 login.config。本地开发相对路径基线仍为 `<repo>/AstrBot/data/addons/plugins/`。
+> 建议先 `ssh-exec.py config discover --write` 把真实路径写回 login.config。本地开发相对路径基线为 `<repo>/AstrBot/data/plugins/`。
 
 ### cmd_config.json 关键字段
 
@@ -185,7 +185,7 @@ api_key =
 | `[git].email` | 插件推荐 | git `user.email`（个人） |
 | `[git].github` | 插件推荐 | `metadata.repo` 根 |
 | `[dashboard].port` | 否 | 远程 WebUI 端口（`astrbot-api --via-ssh`；常非 6185） |
-| `[dashboard].api_key` | 否 | Dashboard API Key（`X-API-Key`；WebUI 创建） |
+| `[dashboard].api_key` | 否 | Dashboard API Key（Bearer/X-API-Key；WebUI 创建） |
 | 旧版 `[git.personal]` / multi-profile | 兼容 | 仍可解析，**新配置请用扁平 [git]** |
 
 自动发现远端布局：`python scripts/ssh-exec.py config discover [--write]`
@@ -275,8 +275,12 @@ print(invoke_shell_send(creds, ["cd /opt/astrbot", "astrbot init", "Y"]))
 |----|------|------|
 | `astrbot_root` | `/opt/astrbot` | 安装根 |
 | `data_dir` | `{root}/data` | 数据目录 |
-| `plugins_dir` | `{data}/addons/plugins`（部分实例仍为 `{data}/plugins`） | 插件安装目录；以 `config discover` 为准 |
-| `plugin_configs_dir` | `{data}/plugin_configs` | 插件配置 |
+| `plugins_dir` | `{data}/plugins`（历史实例可能为 `{data}/addons/plugins`） | 插件安装目录；以 `config discover` 为准 |
+| `plugin_configs_dir` | `{data}/config` | 插件配置 |
+| `skills_dir` | `{data}/skills` | Runtime Skills |
+| `workspaces_dir` | `{data}/workspaces` | 会话 workspace |
+| `knowledge_base_dir` | `{data}/knowledge_base` | 知识库 |
+| `backups_dir` | `{data}/backups` | 备份 |
 | `plugin_data_dir` | `{data}/plugin_data` | 插件持久化 |
 | `cmd_config` | `{data}/cmd_config.json` | 主配置 |
 | `astrbot_unit` | `astrbot` | systemd 单元名 |

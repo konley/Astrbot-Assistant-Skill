@@ -12,12 +12,12 @@
 
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot
-mkdir -p AstrBot/data/addons/plugins      # NOTE: addons/plugins/, not data/plugins/
-cd AstrBot/data/addons/plugins
+mkdir -p AstrBot/data/plugins
+cd AstrBot/data/plugins
 git clone <your_plugin_repo_url>
 ```
 
-4. Open AstrBot project in VS Code and locate plugin under data/addons/plugins/<plugin_name>.
+4. Open AstrBot project in VS Code and locate plugin under data/plugins/<plugin_name>.
 
 ## Must-have Metadata
 AstrBot relies on metadata.yaml to identify plugin metadata.

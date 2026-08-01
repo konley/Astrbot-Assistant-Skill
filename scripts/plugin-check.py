@@ -44,9 +44,10 @@ def _configure_stdio() -> None:
 REQUIRED_META = ("name", "desc", "version", "author")
 LOGO_NAMES = ("logo.png", "logo.jpg", "logo.jpeg", "logo.webp")
 ADAPTER_KEYS = {
-    "aiocqhttp", "qq_official", "telegram", "wecom", "lark", "dingtalk",
-    "discord", "slack", "kook", "vocechat", "weixin_official_account",
-    "satori", "misskey", "line",
+    "aiocqhttp", "qq_official", "qq_official_webhook", "telegram", "wecom",
+    "wecom_ai_bot", "lark", "dingtalk", "discord", "slack", "kook",
+    "vocechat", "weixin_official_account", "weixin_oc", "satori", "misskey",
+    "line", "matrix", "mattermost",
 }
 
 
@@ -222,6 +223,44 @@ def _check_logging(plugin_dir: Path, rep: Report) -> None:
         )
 
 
+SCHEMA_TYPES = {
+    "string", "text", "int", "float", "bool", "list", "object", "dict",
+    "template_list", "file",
+}
+
+
+def _check_config_schema(plugin_dir: Path, rep: Report) -> None:
+    path = plugin_dir / "_conf_schema.json"
+    if not path.is_file():
+        return
+    try:
+        schema = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return
+    if not isinstance(schema, dict):
+        rep.add("FAIL", "schema.root", "_conf_schema.json root must be an object")
+        return
+
+    def visit(items: dict, prefix: str = "") -> None:
+        for key, item in items.items():
+            label = f"{prefix}.{key}" if prefix else str(key)
+            if not isinstance(item, dict):
+                rep.add("FAIL", "schema.item", f"{label} must be an object")
+                continue
+            typ = item.get("type")
+            if typ not in SCHEMA_TYPES:
+                rep.add("FAIL", "schema.type", f"{label}: unsupported type {typ!r}")
+            if "choices" in item or typ == "select":
+                rep.add("FAIL", "schema.legacy_select", f"{label}: use options, not choices/select")
+            if typ == "object":
+                if not isinstance(item.get("items"), dict):
+                    rep.add("FAIL", "schema.object_items", f"{label}: object requires items")
+                else:
+                    visit(item["items"], label)
+
+    visit(schema)
+
+
 def check_plugin(
     plugin_dir: Path,
     *,
@@ -249,6 +288,8 @@ def check_plugin(
         rep.add("WARN", "login", "login.config not found — skip author/repo identity checks")
 
     meta_path = plugin_dir / "metadata.yaml"
+    if not meta_path.is_file() and (plugin_dir / "metadata.yml").is_file():
+        meta_path = plugin_dir / "metadata.yml"
     if not meta_path.is_file():
         rep.add("FAIL", "metadata.missing", "metadata.yaml missing")
         return rep
@@ -275,6 +316,8 @@ def check_plugin(
             "name.mismatch",
             f"metadata.name={name!r} != directory name={folder!r}",
         )
+    if "/" in name or "\\" in name:
+        rep.add("FAIL", "metadata.name.invalid", "name must not contain path separators")
     if name and not name.startswith("astrbot_plugin_") and not name.startswith("astrbot_"):
         rep.add(
             "WARN",
@@ -294,6 +337,11 @@ def check_plugin(
         rep.add("FAIL", "author.empty", "author empty")
 
     repo = str(meta.get("repo") or "").rstrip("/")
+    if repo and not re.match(
+        r"^https://github\.com/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+(?:\.git|/tree/[A-Za-z0-9_-]+)?$",
+        repo,
+    ):
+        rep.add("FAIL", "repo.invalid", "repo must be a GitHub HTTPS repository URL")
     if github_root and name:
         expected_repo = f"{github_root}/{name}"
         rep.expected_repo = expected_repo
@@ -323,6 +371,30 @@ def check_plugin(
             "metadata.display_name",
             "display_name missing (recommended for WebUI; scaffold writes it by default)",
         )
+    for key in ("short_desc", "social_link", "tags"):
+        if key not in meta:
+            rep.add("INFO", f"metadata.{key}", f"{key} is optional but supported by the current marketplace")
+    if "tags" in meta and not isinstance(meta["tags"], list):
+        rep.add("FAIL", "metadata.tags", "tags must be a list of strings")
+
+    i18n_dir = plugin_dir / ".astrbot-plugin" / "i18n"
+    if i18n_dir.is_dir():
+        for path in i18n_dir.glob("*.json"):
+            try:
+                value = json.loads(path.read_text(encoding="utf-8-sig"))
+                if not isinstance(value, dict):
+                    raise ValueError("root must be an object")
+            except Exception as e:
+                rep.add("FAIL", "i18n.parse", f"{path.relative_to(plugin_dir)}: {e}")
+    if (plugin_dir / "skills").is_dir():
+        for skill_dir in (plugin_dir / "skills").iterdir():
+            if skill_dir.is_dir() and not (skill_dir / "SKILL.md").is_file():
+                rep.add("FAIL", "skill.missing", f"{skill_dir.relative_to(plugin_dir)}/SKILL.md missing")
+    pages_dir = plugin_dir / "pages"
+    if pages_dir.is_dir():
+        for page_dir in pages_dir.iterdir():
+            if page_dir.is_dir() and not (page_dir / "index.html").is_file():
+                rep.add("FAIL", "page.index_missing", f"{page_dir.relative_to(plugin_dir)}/index.html missing")
     av = meta.get("astrbot_version")
     if av in (None, ""):
         rep.add(
@@ -435,6 +507,8 @@ def check_plugin(
             json.loads(path.read_text(encoding="utf-8-sig"))
         except Exception as e:
             rep.add("FAIL", "json", f"{path.relative_to(plugin_dir)}: {e}")
+
+    _check_config_schema(plugin_dir, rep)
 
     # tests
     tests_dir = plugin_dir / "tests"

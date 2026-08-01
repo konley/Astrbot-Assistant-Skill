@@ -58,9 +58,9 @@ python scripts/astrbot-api.py --via-ssh plugins reload --name <plugin>
 python scripts/ssh-exec.py log astrbot --since "10 min ago" --grep "error\|exception\|fail"
 python scripts/ssh-exec.py log astrbot --since "30 min ago" --profile plugin --lines 100
 # 看插件目录
-python scripts/ssh-exec.py exec "ls -la /opt/astrbot/data/addons/plugins/<plugin_name>/"
+python scripts/ssh-exec.py exec "ls -la /opt/astrbot/data/plugins/<plugin_name>/"
 # 查 metadata.yaml 是否有 BOM
-python scripts/ssh-exec.py exec "xxd /opt/astrbot/data/addons/plugins/<plugin_name>/metadata.yaml | head -1"
+python scripts/ssh-exec.py exec "xxd /opt/astrbot/data/plugins/<plugin_name>/metadata.yaml | head -1"
 ```
 首字节应为 `7b`(`{`) 或字母，**不**应是 `ef bb bf`(UTF-8 BOM)。
 
@@ -134,7 +134,7 @@ python scripts/ssh-exec.py log astrbot --since "30 min ago" --grep "completion\|
 - **修复**（用 `config-tool.py --plugin`，不要手写 `python3 -c` 改 JSON）：
   ```bash
   # 先用 ls 找插件配置文件名
-  python scripts/ssh-exec.py exec "ls /opt/astrbot/data/plugin_configs/"
+  python scripts/ssh-exec.py exec "ls /opt/astrbot/data/config/"
   # 降概率 + 切串行模式
   python scripts/config-tool.py --plugin <plugin_name> set proactive_emoji_probability 0.2
   python scripts/config-tool.py --plugin <plugin_name> set retrieval_mode on_decorating_result
@@ -330,7 +330,7 @@ python scripts/astrbot-api.py --api-key <key> bots
 # 重载插件
 python scripts/astrbot-api.py --api-key <key> plugins reload --name <plugin>
 # 测试 chat
-python scripts/astrbot-api.py --api-key <key> chat --session test --text "hello"
+python scripts/astrbot-api.py --api-key <key> chat --username alice --session-id test --message "hello"
 ```
 
 ---

@@ -76,7 +76,7 @@ python "$A\ssh-exec.py" diagnose --full
 | 端口不在听 | 查 config + systemd；**restart 需用户确认** |
 | 有 error 日志 | 按关键字进 `debug-handbook.md` 对应节 |
 | 服务正常但不回复 | `trace --since "30 min ago"` |
-| 插件相关 | `ls /opt/astrbot/data/addons/plugins` + API reload |
+| 插件相关 | `ls /opt/astrbot/data/plugins` + API reload |
 
 ---
 
@@ -140,7 +140,7 @@ Profiles：`errors` / `llm` / `ws` / `plugin` / `wake`。
 python "$A\ssh-exec.py" batch `
   "systemctl is-active astrbot" `
   "ss -tlnp | grep -E '6185|6199|62124' || true" `
-  "ls -la /opt/astrbot/data/addons/plugins | head"
+  "ls -la /opt/astrbot/data/plugins | head"
 
 # 或从文件
 python "$A\ssh-exec.py" batch --file cmds.txt
@@ -171,7 +171,7 @@ python "$A\config-tool.py" backup
 ```powershell
 # 本地改完源码后
 python "$A\ssh-exec.py" sync-plugin "C:\path\to\my_plugin" --name my_plugin
-# 远端根目录自动解析：login.config plugins_dir → addons/plugins → data/plugins（以远端真实存在为准）
+# 远端根目录自动解析：login.config plugins_dir → data/plugins → addons/plugins（以远端真实存在为准）
 # 可用 --remote-root 强制指定
 
 # dashboard 只监听 127.0.0.1 时用 --via-ssh
@@ -197,7 +197,7 @@ python "$A\astrbot-api.py" --via-ssh plugins list
 ```powershell
 # 推荐：本地文件上传内容
 python "$A\ssh-exec.py" write /tmp/x.json --file .\local.json
-python "$A\ssh-exec.py" upload .\main.py /opt/astrbot/data/addons/plugins/p/main.py
+python "$A\ssh-exec.py" upload .\main.py /opt/astrbot/data/plugins/p/main.py
 
 # 短字符串才用位置参数
 python "$A\ssh-exec.py" write /tmp/flag.txt "ok"

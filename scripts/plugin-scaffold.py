@@ -63,10 +63,12 @@ from _common import SshConfigError, load_credentials  # noqa: E402
 
 METADATA_TEMPLATE = """\
 name: {name}
+display_name: {display_name}
+short_desc: {short_desc}
 desc: {desc}
 version: 0.1.0
 author: {author}
-{repo_line}{display_line}{platforms_line}{version_line}
+{repo_line}{platforms_line}{version_line}{social_line}{tags_line}
 """
 
 MAIN_TEMPLATE = '''\
@@ -401,6 +403,12 @@ def generate(
     reqs: list[str],
     config_specs: list[str],
     with_lifecycle: bool = False,
+    short_desc: str = "",
+    social_link: str = "",
+    tags: list[str] | None = None,
+    schema_file: Path | None = None,
+    with_i18n: bool = False,
+    with_pages: bool = False,
 ) -> Path:
     plugin_dir = out_dir / name
     if plugin_dir.exists():
@@ -410,16 +418,19 @@ def generate(
 
     # metadata.yaml
     repo_line = f"repo: {repo}\n" if repo else ""
-    display_line = f"display_name: {display_name or name}\n"
     platforms_line = (
         f"support_platforms:\n" + "".join(f"  - {p}\n" for p in platforms) + "\n"
         if platforms else ""
     )
     version_line = f'astrbot_version: "{astrbot_version}"\n' if astrbot_version else ""
+    social_line = f"social_link: {social_link}\n" if social_link else ""
+    tags_line = "tags:\n" + "".join(f"  - {tag}\n" for tag in (tags or [])) if tags else ""
     metadata = METADATA_TEMPLATE.format(
         name=name, desc=desc, author=author,
-        repo_line=repo_line, display_line=display_line,
-        platforms_line=platforms_line, version_line=version_line,
+        display_name=display_name or name,
+        short_desc=short_desc or desc,
+        repo_line=repo_line, platforms_line=platforms_line, version_line=version_line,
+        social_line=social_line, tags_line=tags_line,
     ).rstrip() + "\n"
     _write_no_bom(plugin_dir / "metadata.yaml", metadata)
 
@@ -451,8 +462,22 @@ def generate(
             items_text += SCHEMA_ITEM_TEMPLATE.format(
                 key=key, type=typ, desc=ddesc, default=_json_default(default), comma=comma,
             ) + "\n"
-    schema = SCHEMA_TEMPLATE.format(items=items_text)
+    if schema_file:
+        schema = schema_file.read_text(encoding="utf-8-sig")
+        json.loads(schema)
+    else:
+        schema = SCHEMA_TEMPLATE.format(items=items_text)
     _write_no_bom(plugin_dir / "_conf_schema.json", schema)
+
+    if with_i18n:
+        i18n = plugin_dir / ".astrbot-plugin" / "i18n"
+        i18n.mkdir(parents=True, exist_ok=True)
+        _write_no_bom(i18n / "zh-CN.json", '{"metadata": {}, "config": {}, "pages": {}}\n')
+        _write_no_bom(i18n / "en-US.json", '{"metadata": {}, "config": {}, "pages": {}}\n')
+    if with_pages:
+        page = plugin_dir / "pages" / "settings"
+        page.mkdir(parents=True, exist_ok=True)
+        _write_no_bom(page / "index.html", "<!doctype html>\n<html><body><h1>Plugin Page</h1></body></html>\n")
 
     # tests/test_smoke.py
     smoke = SMOKE_TEST_TEMPLATE.format(class_name=_camel(name))
@@ -499,6 +524,9 @@ def main() -> int:
         help='GitHub repo URL, or "auto" ({github}/{name}), or "none" (omit repo field)',
     )
     p.add_argument("--display-name", help='display name shown in WebUI (default: --name)')
+    p.add_argument("--short-desc", default="", help="compact marketplace description")
+    p.add_argument("--social-link", default="", help="author or project HTTPS URL")
+    p.add_argument("--tags", nargs="*", default=[], help="marketplace tags")
     p.add_argument("--platforms", nargs="*",
                    default=["aiocqhttp"],
                    help='support_platforms list (default: aiocqhttp)')
@@ -508,6 +536,9 @@ def main() -> int:
                    help='third-party deps for requirements.txt')
     p.add_argument("--config", nargs="*", default=[],
                    help='config schema items, each: key:type:desc[:default]')
+    p.add_argument("--schema-file", type=Path, help="copy a complete _conf_schema.json")
+    p.add_argument("--with-i18n", action="store_true")
+    p.add_argument("--with-pages", action="store_true")
     p.add_argument(
         "--with-lifecycle",
         action="store_true",
@@ -584,6 +615,12 @@ def main() -> int:
         reqs=args.reqs,
         config_specs=args.config,
         with_lifecycle=args.with_lifecycle,
+        short_desc=args.short_desc,
+        social_link=args.social_link,
+        tags=args.tags,
+        schema_file=args.schema_file,
+        with_i18n=args.with_i18n,
+        with_pages=args.with_pages,
     )
 
     sys.stdout.write(f"generated plugin at: {plugin_dir}\n")

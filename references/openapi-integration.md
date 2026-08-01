@@ -4,19 +4,20 @@
 
 ## 这个 key 是干什么的？
 
-Skill 用 Dashboard **API Key**（请求头 `X-API-Key`）调用 AstrBot 的 HTTP API，主要场景：
+Skill 用 Dashboard **API Key**（`Authorization: Bearer` 或 `X-API-Key`）调用 AstrBot 的 HTTP API，主要场景：
 
 | 用途 | 命令示例 |
 |------|----------|
 | 列插件 / 重载 / 安装 / 启停 | `astrbot-api.py --via-ssh plugins list/reload/install/on/off` |
-| 读配置 / bots / chat | `config get` / `bots` / `chat` |
+| 读配置 / bots / chat | `config get` / `bots` / `chat --username ... --message ...` |
+| 文件 / IM / Skills / MCP | `file upload` / `im send` / `skills` / `mcp` |
 | 任意探活 | `raw --method GET --path /api/v1/plugins` |
 
 **不需要** key 的场景：`ssh-exec`、`sync-plugin`、`config-tool`、`git-identity`、纯文件同步。
 
 > 源码事实：API Key 存在 **数据库**（WebUI「API Keys」创建，明文通常 `abk_...`）。
 > **不是** `cmd_config.json` 里的 `dashboard.api_key` 静态字段（旧文档说法已废弃）。
-> 旧路径 `/api/plugin/*` 走 JWT 中间件，**只认 Bearer/Cookie**；本 CLI 优先 `/api/v1/*`（认 X-API-Key）。
+> 旧路径 `/api/plugin/*` 走 JWT 中间件；本 CLI 优先 `/api/v1/*`，同时发送 Bearer 和 X-API-Key。
 
 ## 鉴权与端口（login.config）
 
@@ -54,7 +55,10 @@ python scripts/astrbot-api.py --via-ssh plugins list
 python scripts/astrbot-api.py --via-ssh plugins reload --name my_plugin
 python scripts/astrbot-api.py --via-ssh bots
 python scripts/astrbot-api.py --via-ssh config get
-python scripts/astrbot-api.py --via-ssh chat --session test --text "hello"
+python scripts/astrbot-api.py --via-ssh chat --username alice --session-id test --message "hello"
+python scripts/astrbot-api.py --via-ssh chat-sessions --username alice
+python scripts/astrbot-api.py --via-ssh im send --umo "telegram:FriendMessage:1" --message "hello"
+python scripts/astrbot-api.py --api-key abk_xxx file upload ./report.pdf
 python scripts/astrbot-api.py --via-ssh raw --method GET --path /api/v1/plugins
 ```
 

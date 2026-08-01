@@ -119,15 +119,18 @@ cn_description: >-
 | `ssh-exec.py framework check\|sync` | 版本 pin 缓存 vs host runtime（禁 latest fallback） |
 | `ssh-exec.py config discover [--write]` | 探测主机布局并建议/回填 login.config [paths]/port |
 | `ssh-exec.py sync-plugin` | 插件同步到 host plugins 根（login.config → modern → legacy 自动回退） |
-| `config-tool.py` | 安全改 cmd_config / plugin_configs |
-| `astrbot-api.py` / `--via-ssh` | 插件 list/reload/install（local 直连，remote 用 --via-ssh） |
+| `config-tool.py` | 安全改 cmd_config / data/config |
+| `astrbot-api.py` / `--via-ssh` | OpenAPI：插件、Chat、IM、文件、Skills、MCP（local 直连，remote 用 --via-ssh） |
+| `doctor.py` | 只读检查 Python、依赖、runtime、路径和框架缓存 |
+| `market-check.py` | 插件元数据、市场 JSON、16MB 发布包检查 |
+| `backup-tool.py` | 用户确认后创建本地 AstrBot 数据归档 |
 | `plugin-scaffold.py` / `plugin-check.py` | 脚手架 / 合规 |
 | `git-identity.py` | 个人身份门禁 |
 
 ## 路径基线（可配置）
 
 默认生产：`/opt/astrbot`（可用 `login.config [paths]` 覆盖）。  
-插件安装：优先 `data/addons/plugins/{name}/`；旧实例可能是 `data/plugins/`。`sync-plugin` / `diagnose` 会探测远端真实目录并自动回退；以 `config discover` 与 login.config `[paths].plugins_dir` 为准。  
+插件安装：当前默认 `data/plugins/{name}/`；历史实例可能是 `data/addons/plugins/`。`sync-plugin` / `diagnose` 会探测远端真实目录并自动回退；以 `config discover` 与 login.config `[paths].plugins_dir` 为准。
 权威表：`references/config-reference.md`。
 
 ## login.config
@@ -206,27 +209,32 @@ astrbot_root = /opt/astrbot
 | `openapi-integration.md` | API 鉴权 |
 | `compliance-checklist.md` | 交付合规 |
 | `troubleshooting.md` | 边缘案例 |
+| `modern-runtime.md` | uv/Docker/Compose/当前路径与升级 |
+| `skills-sandbox-mcp.md` | Runtime Skills、Sandbox、MCP、主动 Agent |
+| `backup-recovery.md` | 实例备份与恢复 |
 
 ## 硬约束（唯一权威清单）
 
 1. 主机操作只走 `scripts/` CLI；禁止临时 paramiko/sed 改 JSON。  
 2. 禁止随意重启：重载 ≫ 重装 ≫ 重启；重启须用户确认 + `service … --yes`。  
 3. NapCat 反向 WS 地址必须带 `/ws`。  
-4. 插件路径优先 `data/addons/plugins/`（旧实例可回退 `data/plugins/`，以 host 探测/`config discover` 为准）；持久化 `data/plugin_data/`；网络用异步 aiohttp/httpx。  
+4. 插件路径默认 `data/plugins/`（历史实例可回退 `data/addons/plugins/`，以 host 探测/`config discover` 为准）；插件配置在 `data/config/`，持久化数据在 `data/plugin_data/`；网络用异步 aiohttp/httpx。
 5. git 只认 login.config 个人身份；交付 `plugin-check` 无 FAIL。  
 6. 带 Page：先读 `plugin-page-patterns.md`（iframe 沙箱限制）。  
 7. 改插件优先在 git 项目目录；再 `sync-plugin` 到运行目录（local 也不要只改生产目录不提交）。  
 8. 依赖框架 API 前必须 `framework check`；版本不一致先对齐；`api-cheatsheet`/`agent-tools` 是速查，不是 runtime 权威。  
-9. `_conf_schema.json` type 以 `source-config-schema.md` 为准（无 `choices`/`select`）。  
+9. `_conf_schema.json` type 以 `source-config-schema.md` 为准；当前支持 `string/text/int/float/bool/list/object/dict/template_list/file`，使用 `options`，不使用 `choices` 或 `type: select`。
 10. 生成代码提交前 ruff 格式化。
 11. 插件运行信号必须走 `astrbot.api.logger`（带 `[plugin_name]` 前缀），禁止 `print` 充当运维日志；脚手架默认已带，改插件时也要补齐。
 12. 先 `whoami` 确认 `resolved=local|remote`；local 不需要 SSH/paramiko；remote 才要求 `[ssh]`。
+13. `--via-ssh` 与 local 模式冲突时必须停止，不得静默改为本地目标。
+14. 插件 install/update/uninstall/on/off 与服务状态改变必须显式 `--yes`。
 
 > references 内不再重复展开上述清单，只引用「硬约束 #N」。
 
 ## 适配器键（support_platforms）
 
-aiocqhttp · qq_official · telegram · wecom · lark · dingtalk · discord · slack · kook · vocechat · weixin_official_account · satori · misskey · line
+aiocqhttp · qq_official · qq_official_webhook · telegram · wecom · wecom_ai_bot · lark · dingtalk · discord · slack · kook · vocechat · weixin_official_account · weixin_oc · satori · misskey · line · matrix · mattermost
 
 ## Skill 维护
 

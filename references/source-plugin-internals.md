@@ -133,11 +133,11 @@ uninstall(plugin_name, delete_config=False, delete_data=False):
 - 路径：插件根目录 `_conf_schema.json`
 - 结构：`{"key1": {"type":"string","default":"...","description":"..."}, "key2": {...}}`（扁平 dict，无 `config_items` 包裹）
 - 加载时 schema 转为默认值 dict，传给插件 `__init__(config: dict)`
-- 用户在 WebUI 修改配置 → 写入 `data/plugin_configs/<plugin_name>.json`
-- 下次重载时读 `data/plugin_configs/<plugin_name>.json` 覆盖默认值
+- 用户在 WebUI 修改配置 → 写入 `data/config/<plugin_name>_config.json`
+- 下次重载时读 `data/config/<plugin_name>_config.json` 覆盖默认值
 
 详细 type 支持（`int` / `float` / `bool` / `string` / `text` / `list` / `file` /
-`object` / `template_list`）和 `options` 数组下拉菜单语法，见
+`dict` / `object` / `template_list`）和 `options` 数组下拉菜单语法，见
 `references/source-config-schema.md`。
 
 ## 7. 插件目录结构
@@ -153,7 +153,7 @@ uninstall(plugin_name, delete_config=False, delete_data=False):
   logo.png                     # 可选
   tests/                       # 可选
 
-<plugin_config_dir>/<plugin_name>.json    # 用户配置（运行时生成）
+<plugin_config_dir>/<plugin_name>_config.json # 用户配置（运行时生成）
 <plugin_data_dir>/<plugin_name>/          # 持久化数据目录
 ```
 
@@ -162,7 +162,7 @@ uninstall(plugin_name, delete_config=False, delete_data=False):
 ```
 本地改 main.py
    ↓ git push（可选）
-   ↓ SFTP 同步到 /opt/astrbot/data/addons/plugins/<name>/main.py
+   ↓ SFTP 同步到 /opt/astrbot/data/plugins/<name>/main.py
    ↓ POST /api/plugin/reload {"name": "<name>"}
    ↓ _pm_lock 锁住
    ↓ _terminate_plugin → _unbind_plugin → load()

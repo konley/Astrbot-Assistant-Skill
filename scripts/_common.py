@@ -221,16 +221,21 @@ class PathLayout:
     astrbot_unit: str = "astrbot"
     napcat_unit: str = ""
     python_bin: str = ""  # optional remote AstrBot env python
+    skills_dir: str = ""
+    workspaces_dir: str = ""
+    knowledge_base_dir: str = ""
+    backups_dir: str = ""
+    site_packages_dir: str = ""
 
     def __post_init__(self) -> None:
         root = (self.astrbot_root or "/opt/astrbot").rstrip("/") or "/opt/astrbot"
         self.astrbot_root = root
         self.data_dir = (self.data_dir or f"{root}/data").rstrip("/")
         self.plugins_dir = (
-            self.plugins_dir or f"{self.data_dir}/addons/plugins"
+            self.plugins_dir or f"{self.data_dir}/plugins"
         ).rstrip("/")
         self.plugin_configs_dir = (
-            self.plugin_configs_dir or f"{self.data_dir}/plugin_configs"
+            self.plugin_configs_dir or f"{self.data_dir}/config"
         ).rstrip("/")
         self.plugin_data_dir = (
             self.plugin_data_dir or f"{self.data_dir}/plugin_data"
@@ -239,6 +244,15 @@ class PathLayout:
         self.astrbot_unit = (self.astrbot_unit or "astrbot").strip() or "astrbot"
         self.napcat_unit = (self.napcat_unit or "").strip()
         self.python_bin = (self.python_bin or "").strip()
+        self.skills_dir = (self.skills_dir or f"{self.data_dir}/skills").rstrip("/")
+        self.workspaces_dir = (self.workspaces_dir or f"{self.data_dir}/workspaces").rstrip("/")
+        self.knowledge_base_dir = (
+            self.knowledge_base_dir or f"{self.data_dir}/knowledge_base"
+        ).rstrip("/")
+        self.backups_dir = (self.backups_dir or f"{self.data_dir}/backups").rstrip("/")
+        self.site_packages_dir = (
+            self.site_packages_dir or f"{self.data_dir}/site-packages"
+        ).rstrip("/")
 
     def as_dict(self) -> dict:
         return {
@@ -251,6 +265,11 @@ class PathLayout:
             "astrbot_unit": self.astrbot_unit,
             "napcat_unit": self.napcat_unit,
             "python_bin": self.python_bin,
+            "skills_dir": self.skills_dir,
+            "workspaces_dir": self.workspaces_dir,
+            "knowledge_base_dir": self.knowledge_base_dir,
+            "backups_dir": self.backups_dir,
+            "site_packages_dir": self.site_packages_dir,
         }
 
 
@@ -541,8 +560,8 @@ api_key =
 #   remote = 远端真实路径
 # astrbot_root = /opt/astrbot
 # data_dir = /opt/astrbot/data
-# plugins_dir = /opt/astrbot/data/addons/plugins
-# plugin_configs_dir = /opt/astrbot/data/plugin_configs
+# plugins_dir = /opt/astrbot/data/plugins
+# plugin_configs_dir = /opt/astrbot/data/config
 # plugin_data_dir = /opt/astrbot/data/plugin_data
 # cmd_config = /opt/astrbot/data/cmd_config.json
 # astrbot_unit = astrbot
@@ -776,6 +795,15 @@ def _parse_paths_mapping(raw: dict | None) -> PathLayout:
         astrbot_unit=str(raw.get("astrbot_unit") or raw.get("unit") or "astrbot"),
         napcat_unit=str(raw.get("napcat_unit") or ""),
         python_bin=str(raw.get("python_bin") or raw.get("python") or ""),
+        skills_dir=str(raw.get("skills_dir") or raw.get("skills") or ""),
+        workspaces_dir=str(raw.get("workspaces_dir") or raw.get("workspaces") or ""),
+        knowledge_base_dir=str(
+            raw.get("knowledge_base_dir") or raw.get("knowledge_base") or ""
+        ),
+        backups_dir=str(raw.get("backups_dir") or raw.get("backups") or ""),
+        site_packages_dir=str(
+            raw.get("site_packages_dir") or raw.get("site_packages") or ""
+        ),
     )
 
 

@@ -5,11 +5,11 @@ AstrBot Skill - AstrBot WebUI / OpenAPI HTTP CLI.
 Wraps AstrBot Dashboard HTTP endpoints so the model can drive plugin lifecycle,
 read config, and chat via one-liners instead of curl + manual JSON shaping.
 
-Endpoint family (prefer OpenAPI v1 — works with X-API-Key):
+Endpoint family (prefer OpenAPI v1 — works with API keys):
   - /api/v1/*            OpenAPI v1 (plugins / chat / bots / configs / ...)
   - /api/plugin/*        WebUI legacy (JWT cookie/Bearer only; API key ignored by middleware)
 
-Auth resolution for X-API-Key (first non-empty wins):
+Auth resolution for API key (first non-empty wins):
   1) --api-key
   2) $ASTRBOT_API_KEY
   3) login.config [dashboard].api_key
@@ -35,7 +35,7 @@ Usage:
     python astrbot-api.py plugins install --repo https://github.com/user/plug
     python astrbot-api.py config get
     python astrbot-api.py bots
-    python astrbot-api.py chat --session s1 --text "hello"
+    python astrbot-api.py chat --username alice --session-id s1 --message "hello"
     python astrbot-api.py raw --method GET --path /api/v1/plugins
 """
 from __future__ import annotations
@@ -46,7 +46,9 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 DEFAULT_BASE_URL = "http://localhost:6185"
@@ -269,12 +271,48 @@ class Transport:
             return self._request_via_ssh(method, url, body)
         return self._request_direct(method, url, body)
 
+    def upload_file(self, path: str) -> tuple[int, str]:
+        """Upload an attachment using the current multipart API contract."""
+        file_path = Path(path)
+        data = file_path.read_bytes()
+        boundary = "----astrbot" + uuid.uuid4().hex
+        parts = [
+            f"--{boundary}\r\n".encode(),
+            (
+                f'Content-Disposition: form-data; name="file"; '
+                f'filename="{file_path.name}"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n"
+            ).encode(),
+            data,
+            f"\r\n--{boundary}--\r\n".encode(),
+        ]
+        body = b"".join(parts)
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        }
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.via_ssh:
+            raise ApiError(0, "multipart upload via SSH is not supported yet; use raw over a tunnel")
+        req = urllib.request.Request(
+            self.base_url + "/api/v1/file", data=body, headers=headers, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                return resp.status, resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode("utf-8", errors="replace")
+            raise ApiError(e.code, body_text, hint=self._auth_hint(e.code)) from None
+
     def _request_direct(
         self, method: str, url: str, body: dict | None
     ) -> tuple[int, str]:
         headers = {"Accept": "application/json"}
         if self.api_key:
             headers["X-API-Key"] = self.api_key
+            headers["Authorization"] = f"Bearer {self.api_key}"
         data = None
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -300,6 +338,7 @@ class Transport:
         headers = {"Accept": "application/json"}
         if self.api_key:
             headers["X-API-Key"] = self.api_key
+            headers["Authorization"] = f"Bearer {self.api_key}"
         body_str = None
         if body is not None:
             body_str = json.dumps(body, ensure_ascii=False)
@@ -506,11 +545,47 @@ def cmd_bots(t: Transport) -> int:
     return 0 if status < 400 else 1
 
 
-def cmd_chat(t: Transport, session: str, text: str) -> int:
+def cmd_get(t: Transport, path: str) -> int:
+    status, text = t.request("GET", path)
+    _print_json(text)
+    return 0 if status < 400 else 1
+
+
+def cmd_im_send(t: Transport, umo: str, message: str) -> int:
+    status, text = t.request(
+        "POST", "/api/v1/im/message", body={"umo": umo, "message": message}
+    )
+    _print_json(text)
+    return 0 if status < 400 else 1
+
+
+def cmd_file_upload(t: Transport, path: str) -> int:
+    status, text = t.upload_file(path)
+    _print_json(text)
+    return 0 if status < 400 else 1
+
+
+def cmd_chat(
+    t: Transport,
+    username: str,
+    session_id: str | None,
+    message: str,
+    enable_streaming: bool,
+) -> int:
+    if enable_streaming:
+        sys.stderr.write(
+            "[astrbot-api] note: streaming response is requested; this CLI prints the "
+            "SSE body after the request and does not reformat individual events.\n"
+        )
     status, body = t.request(
         "POST",
         "/api/v1/chat",
-        body={"session_id": session, "text": text},
+        body={
+            "username": username,
+            "session_id": session_id,
+            "message": message,
+            "enable_streaming": enable_streaming,
+        },
     )
     _print_json(body)
     return 0 if status < 400 else 1
@@ -583,18 +658,23 @@ def main() -> int:
     s_install = plug_sub.add_parser("install", help="install from repo URL")
     s_install.add_argument("--repo", required=True)
     s_install.add_argument("--proxy", default="")
+    s_install.add_argument("--yes", action="store_true")
 
     s_uninstall = plug_sub.add_parser("uninstall", help="uninstall by name")
     s_uninstall.add_argument("--name", required=True)
+    s_uninstall.add_argument("--yes", action="store_true")
 
     s_update = plug_sub.add_parser("update", help="update a plugin")
     s_update.add_argument("--name", required=True)
+    s_update.add_argument("--yes", action="store_true")
 
     s_on = plug_sub.add_parser("on", help="enable a plugin")
     s_on.add_argument("--name", required=True)
+    s_on.add_argument("--yes", action="store_true")
 
     s_off = plug_sub.add_parser("off", help="disable a plugin")
     s_off.add_argument("--name", required=True)
+    s_off.add_argument("--yes", action="store_true")
 
     plug_sub.add_parser("reload-failed", help="reload failed plugins")
 
@@ -604,9 +684,30 @@ def main() -> int:
 
     sub.add_parser("bots", help="GET /api/v1/im/bots")
 
+    s_im = sub.add_parser("im", help="IM operations")
+    im_sub = s_im.add_subparsers(dest="im_action", required=True)
+    s_im_send = im_sub.add_parser("send", help="POST /api/v1/im/message")
+    s_im_send.add_argument("--umo", required=True)
+    s_im_send.add_argument("--message", required=True)
+
+    s_file = sub.add_parser("file", help="file operations")
+    file_sub = s_file.add_subparsers(dest="file_action", required=True)
+    s_file_upload = file_sub.add_parser("upload", help="upload an attachment")
+    s_file_upload.add_argument("path")
+    file_sub.add_parser("list", help="list file attachments")
+
+    s_sessions = sub.add_parser("chat-sessions", help="GET /api/v1/chat/sessions")
+    s_sessions.add_argument("--username", required=True)
+
+    for name, path in (("personas", "/api/v1/personas"), ("providers", "/api/v1/providers"),
+                       ("skills", "/api/v1/skills"), ("mcp", "/api/v1/mcp/servers")):
+        sub.add_parser(name, help=f"GET {path}")
+
     s_chat = sub.add_parser("chat", help="POST /api/v1/chat")
-    s_chat.add_argument("--session", required=True)
-    s_chat.add_argument("--text", required=True)
+    s_chat.add_argument("--username", required=True)
+    s_chat.add_argument("--session-id")
+    s_chat.add_argument("--message", required=True)
+    s_chat.add_argument("--stream", action="store_true", dest="enable_streaming")
 
     s_raw = sub.add_parser("raw", help="arbitrary HTTP call")
     s_raw.add_argument("--method", required=True)
@@ -639,10 +740,10 @@ def main() -> int:
     via_ssh = bool(args.via_ssh)
     if via_ssh and resolved_mode == "local":
         sys.stderr.write(
-            "[astrbot-api] note: runtime.mode=local — ignoring --via-ssh, "
-            "using direct HTTP to loopback dashboard\n"
+            "[astrbot-api] error: --via-ssh conflicts with runtime.mode=local; "
+            "set mode=remote or remove --via-ssh\n"
         )
-        via_ssh = False
+        return 2
     if via_ssh:
         # Ensure SSH-ready credentials (raises clearly if incomplete)
         _creds, cfg_key, cfg_port, config_source = load_dashboard_settings(
@@ -706,14 +807,24 @@ def main() -> int:
             if pa == "reload":
                 return cmd_plugins_reload(t, args.name, args.all_)
             if pa == "install":
+                if not args.yes:
+                    raise RuntimeError("plugins install requires --yes")
                 return cmd_plugins_install(t, args.repo, args.proxy)
             if pa == "uninstall":
+                if not args.yes:
+                    raise RuntimeError("plugins uninstall requires --yes")
                 return cmd_plugins_uninstall(t, args.name)
             if pa == "update":
+                if not args.yes:
+                    raise RuntimeError("plugins update requires --yes")
                 return cmd_plugins_update(t, args.name)
             if pa == "on":
+                if not args.yes:
+                    raise RuntimeError("plugins on requires --yes")
                 return cmd_plugins_on_off(t, args.name, on=True)
             if pa == "off":
+                if not args.yes:
+                    raise RuntimeError("plugins off requires --yes")
                 return cmd_plugins_on_off(t, args.name, on=False)
             if pa == "reload-failed":
                 return cmd_plugins_reload_failed(t)
@@ -722,8 +833,30 @@ def main() -> int:
                 return cmd_config_get(t)
         if args.action == "bots":
             return cmd_bots(t)
+        if args.action == "im":
+            return cmd_im_send(t, args.umo, args.message)
+        if args.action == "file":
+            if args.file_action == "upload":
+                return cmd_file_upload(t, args.path)
+            return cmd_get(t, "/api/v1/files")
+        if args.action == "chat-sessions":
+            return cmd_get(t, "/api/v1/chat/sessions?username=" + urllib.parse.quote(args.username))
+        if args.action == "personas":
+            return cmd_get(t, "/api/v1/personas")
+        if args.action == "providers":
+            return cmd_get(t, "/api/v1/providers")
+        if args.action == "skills":
+            return cmd_get(t, "/api/v1/skills")
+        if args.action == "mcp":
+            return cmd_get(t, "/api/v1/mcp/servers")
         if args.action == "chat":
-            return cmd_chat(t, args.session, args.text)
+            return cmd_chat(
+                t,
+                args.username,
+                args.session_id,
+                args.message,
+                args.enable_streaming,
+            )
         if args.action == "raw":
             return cmd_raw(t, args.method, args.path, args.json)
     except ApiError as e:

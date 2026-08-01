@@ -105,16 +105,16 @@ if not out["python_bin"]:
 # layout paths
 data = str(Path(root) / "data")
 out["data_dir"] = data if Path(data).is_dir() else data
-plugins = str(Path(data) / "addons" / "plugins")
-legacy_plugins = str(Path(data) / "plugins")
+plugins = str(Path(data) / "plugins")
+legacy_plugins = str(Path(data) / "addons" / "plugins")
 if Path(plugins).is_dir():
     out["plugins_dir"] = plugins
 elif Path(legacy_plugins).is_dir():
     out["plugins_dir"] = legacy_plugins
-    out["notes"].append("plugins_dir looks like legacy data/plugins")
+    out["notes"].append("plugins_dir uses historical data/addons/plugins")
 else:
     out["plugins_dir"] = plugins
-out["plugin_configs_dir"] = str(Path(data) / "plugin_configs")
+out["plugin_configs_dir"] = str(Path(data) / "config")
 out["plugin_data_dir"] = str(Path(data) / "plugin_data")
 cmd_config = str(Path(data) / "cmd_config.json")
 out["cmd_config"] = cmd_config
@@ -311,7 +311,7 @@ _STOCK_DEFAULTS: dict[tuple[str, str], set[str]] = {
         "/opt/astrbot/data/addons/plugins",
         "/opt/astrbot/data/plugins",
     },
-    ("paths", "plugin_configs_dir"): {"/opt/astrbot/data/plugin_configs"},
+    ("paths", "plugin_configs_dir"): {"/opt/astrbot/data/config"},
     ("paths", "plugin_data_dir"): {"/opt/astrbot/data/plugin_data"},
     ("paths", "cmd_config"): {"/opt/astrbot/data/cmd_config.json"},
     ("dashboard", "port"): {"6185"},

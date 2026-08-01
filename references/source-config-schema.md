@@ -132,7 +132,8 @@ https://docs.astrbot.app
 | `string` | 字符串（单行） | `"北京"` |
 | `text` | 多行文本 | `"long..."` |
 | `list` | 列表 | `["a", "b"]` |
-| `file` | 文件路径（WebUI 上传） | `""` |
+| `file` | 文件上传配置 | `[]` |
+| `dict` | 字典配置 | `{}` |
 | `object` | 嵌套对象 | `{}` |
 | `template_list` | 模板列表（高级） | `[]` |
 
@@ -167,9 +168,9 @@ https://docs.astrbot.app
 ### 运行时读取流程
 
 1. 插件加载时，schema 的 `default` 组成初始 config dict
-2. 若 `data/plugin_configs/<plugin>.json` 存在，覆盖默认值
-3. 用户在 WebUI 修改配置 → 写入 `data/plugin_configs/<plugin>.json`
-4. 重载插件时读 `<plugin>.json` 覆盖默认值，传给 `__init__`
+2. 若 `data/config/<plugin>_config.json` 存在，覆盖默认值
+3. 用户在 WebUI 修改配置 → 写入 `data/config/<plugin>_config.json`
+4. 重载插件时读 `<plugin>_config.json` 覆盖默认值，传给 `__init__`
 
 ```python
 class MyPlugin(Star):
@@ -206,7 +207,7 @@ python scripts/config-tool.py backup --local cmd_config.bak.json
 - 改完核心配置（platform / provider / dashboard）后**必须 restart astrbot**，且
   **必须征得用户确认**（影响核心生命周期）
 - 改 `wake_prefix` / `empty_mention_waiting` 等运行时项也要 restart 才生效
-- 插件配置（`plugin_configs/*.json`）改完只需要 reload，不要 restart
+- 插件配置（`config/*_config.json`）改完只需要 reload，不要 restart
 
 ## 4. 常见配置陷阱
 
@@ -216,7 +217,7 @@ python scripts/config-tool.py backup --local cmd_config.bak.json
 | NapCat 连 405 | 反向 WS 地址缺 `/ws` | NapCat 端改为 `ws://IP:PORT/ws` |
 | webui.json 端口不生效（仍是 6099） | 文件有 BOM | 用 `ssh-exec.py write` 重写无 BOM |
 | `support_platforms` 不识别 | 用了 `choices` 或 `type:"select"` | 改用 `type:"string"` + `options` 数组 |
-| 插件配置改了不生效 | 改了 plugin_configs 但没 reload | `astrbot-api.py plugins reload --name X` |
+| 插件配置改了不生效 | 改了 config/*_config.json 但没 reload | `astrbot-api.py plugins reload --name X` |
 | MiniMax 推理混入正文 | `anth_thinking_config` 未启用 | `config-tool.py set provider.0.anth_thinking_config '{"type":"enabled","budget":2048}'` |
 
 ## 5. 完整 provider 示例（MiniMax + 推理修复后）

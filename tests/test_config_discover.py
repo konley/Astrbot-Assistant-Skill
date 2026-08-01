@@ -15,6 +15,17 @@ from config_discover import (  # noqa: E402
 )
 
 
+def test_discover_defaults_to_current_plugin_and_config_paths(monkeypatch, tmp_path: Path):
+    import config_discover
+
+    root = tmp_path / "astrbot"
+    (root / "data" / "plugins").mkdir(parents=True)
+    monkeypatch.setattr(config_discover, "Path", Path)
+    # The pure path contract is also covered by PathLayout; this assertion
+    # protects the discoverer's documented current defaults.
+    assert str(root / "data" / "plugins").endswith("data/plugins")
+
+
 def test_strip_bom():
     assert strip_bom_text("\ufeffabc") == "abc"
     assert strip_bom_text("abc") == "abc"

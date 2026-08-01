@@ -29,7 +29,7 @@ Usage:
     python config-tool.py patch '{"dashboard.port":62124,"platform.0.enable":false}'
     python config-tool.py unset persona.some_temp_key
     python config-tool.py backup                    # download copy to local ./cmd_config.bak.json
-    python config-tool.py --plugin myplug get city_default      # operate on plugin_configs/myplug.json
+    python config-tool.py --plugin myplug get city_default      # operate on data/config/myplug_config.json
     python config-tool.py --plugin myplug set proactive_emoji_probability 0.2
 
 Type coercion rules for `set`:
@@ -77,9 +77,9 @@ def _plugin_config_path(creds, plugin: str) -> str:
     base = (
         str(paths.plugin_configs_dir)
         if paths and getattr(paths, "plugin_configs_dir", None)
-        else "/opt/astrbot/data/plugin_configs"
+        else "/opt/astrbot/data/config"
     )
-    return f"{base.rstrip('/')}/{plugin}.json"
+    return f"{base.rstrip('/')}/{plugin}_config.json"
 
 
 
@@ -289,7 +289,7 @@ def main() -> int:
     p.add_argument("--path", default=DEFAULT_REMOTE_PATH,
                    help=f"remote cmd_config.json path (default: {DEFAULT_REMOTE_PATH})")
     p.add_argument("--plugin",
-                   help="shortcut: operate on plugin_configs/<name>.json (overrides --path)")
+                   help="shortcut: operate on data/config/<name>_config.json (overrides --path)")
     sub = p.add_subparsers(dest="action", required=True)
 
     s_show = sub.add_parser("show", help="print whole config (or sub-key with --key)")

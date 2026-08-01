@@ -82,8 +82,8 @@ def _configure_stdio() -> None:
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_PLUGIN_ROOT = "/opt/astrbot/data/addons/plugins"  # modern default
-DEFAULT_PLUGIN_ROOT_LEGACY = "/opt/astrbot/data/plugins"  # older installs
+DEFAULT_PLUGIN_ROOT = "/opt/astrbot/data/plugins"  # current AstrBot default
+DEFAULT_PLUGIN_ROOT_LEGACY = "/opt/astrbot/data/addons/plugins"  # historical installs
 DEFAULT_CMD_CONFIG = "/opt/astrbot/data/cmd_config.json"
 
 
@@ -122,8 +122,8 @@ def plugin_root_candidates(
         root = (getattr(p, "astrbot_root", None) or root).rstrip("/") or root
         data = (getattr(p, "data_dir", None) or f"{root}/data").rstrip("/") or f"{root}/data"
 
-    cands.append(f"{data}/addons/plugins")
     cands.append(f"{data}/plugins")
+    cands.append(f"{data}/addons/plugins")
     # absolute stock fallbacks (in case data_dir was customized oddly)
     cands.append(DEFAULT_PLUGIN_ROOT)
     cands.append(DEFAULT_PLUGIN_ROOT_LEGACY)
@@ -861,9 +861,9 @@ def cmd_service(
             return 2
         cmd = f"systemctl disable {_shell_quote(target)}"
     elif action in ("restart", "start", "stop", "reload"):
-        if action == "restart" and not yes:
+        if action in ("restart", "reload") and not yes:
             sys.stderr.write(
-                "service restart requires --yes and user confirmation policy.\n"
+                f"service {action} requires --yes and user confirmation policy.\n"
                 "Prefer: plugins reload via astrbot-api, or re-run with --yes after confirm.\n"
             )
             return 2
@@ -1255,7 +1255,7 @@ def main() -> int:
 
     s_sp = sub.add_parser(
         "sync-plugin",
-        help="sync local plugin dir to host plugins root (login.config / modern addons/plugins / legacy data/plugins)",
+        help="sync local plugin dir to host plugins root (login.config / current data/plugins / legacy addons/plugins)",
     )
     s_sp.add_argument("local_dir")
     s_sp.add_argument("--name", help="remote plugin folder name (default: local dir name)")
@@ -1304,7 +1304,7 @@ def main() -> int:
     s_svc.add_argument(
         "--yes",
         action="store_true",
-        help="required for restart/start/stop/disable (user must confirm)",
+        help="required for restart/reload/start/stop/disable (user must confirm)",
     )
 
     s_tun = sub.add_parser(
