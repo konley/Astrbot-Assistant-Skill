@@ -137,3 +137,39 @@ $PY -c "import sentence_transformers; print(sentence_transformers.__version__)"
 ```bash
 systemctl restart astrbot
 ```
+
+## 8. 新增 provider 后模型不可用：key 必须是数组，写字符串报 401 / 'str' object has no attribute 'copy'
+
+**现象**：手动在 `cmd_config.json` 的 `provider_sources` 新增 OpenAI 兼容中转站后，模型报错：
+- 日志/API 报 `openai.AuthenticationError: Error code: 401 - invalid_api_key`（实际 key 完全正确）
+- 或 `AttributeError: 'str' object has no attribute 'copy'`
+
+**原因**：`provider.py get_keys()` 原样返回 `provider_sources[].key` 字段；该字段**必须是数组** `["sk-xxx"]`（多 key 轮询）。写成字符串后：
+- `self.api_keys[0]` 取到 key 的**第一个字符** → 401；
+- 后续 `self.api_keys.copy()` 对 str 调用 → `'str' object has no attribute 'copy'`。
+
+**解决**：
+
+```json
+// 错误
+"key": "sk-abc..."
+// 正确（与 st/ah 等既有供应商一致）
+"key": ["sk-abc..."]
+```
+
+**验证**：改后重启 AstrBot，用 `astrbot-api.py chat --username x --message "ping"` 实测；新增 provider 结构对齐既有条目（`provider`/`type`/`provider_type`/`key` 数组/`api_base`/`timeout`/`proxy`/`custom_headers`/`id`/`enable`）。
+
+**提醒**：新增 openai_chat_completion 供应商时，先 curl 验证 `GET {api_base}/v1/models` 与 `POST /chat/completions` 可用再写配置。
+
+## 9. 插件源码误入 skill 仓库（禁止）
+
+**现象**：skill 仓库根目录出现未跟踪的 `astrbot_plugin_*` 目录（插件 git 开发副本 / clone）。
+
+**原因**：开发插件时把插件项目 clone 或放在了 skill 目录下，未在提交前清理。
+
+**解决**：
+1. 确认该插件在运行目录 `data/plugins/<name>` 已有副本（`diff -rq` 比对，排除 `__pycache__` 等缓存）。
+2. 删除 skill 内的副本（`rm -r`，勿用 `rm -rf` 全路径）。
+3. 插件源码应放独立 git 项目；同步运行目录用 `sync-plugin`。
+
+**硬约束**：见 SKILL.md 硬约束 #15 —— skill 仓库只放 skill 自身文件。

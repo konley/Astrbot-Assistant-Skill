@@ -237,6 +237,7 @@ astrbot_root = /opt/astrbot
 12. 先 `whoami` 确认 `resolved=local|remote`；local 不需要 SSH/paramiko；remote 才要求 `[ssh]`。
 13. `--via-ssh` 与 local 模式冲突时必须停止，不得静默改为本地目标。
 14. 插件 install/update/uninstall/on/off 与服务状态改变必须显式 `--yes`。
+15. **skill 仓库只放 skill 自身文件**：禁止把插件源码/第三方项目（含 clone、开发副本、`astrbot_plugin_*` 目录）放进 skill 根目录或子目录；插件源码在独立 git 项目，运行目录在 `data/plugins/`。误入即清理（skill 内出现 `astrbot_plugin_*` 未跟踪目录视为违规）。
 
 > references 内不再重复展开上述清单，只引用「硬约束 #N」。
 
