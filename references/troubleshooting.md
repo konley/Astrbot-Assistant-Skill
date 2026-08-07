@@ -161,6 +161,26 @@ systemctl restart astrbot
 
 **提醒**：新增 openai_chat_completion 供应商时，先 curl 验证 `GET {api_base}/v1/models` 与 `POST /chat/completions` 可用再写配置。
 
+### 8.1 附加：中转站 WAF 拦截 OpenAI SDK 的 User-Agent（403 "Your request was blocked."）
+
+**现象**：openai SDK 调用某中转站报 `PermissionDeniedError: Your request was blocked.`（HTTP 403），但 curl 同 key 同参数正常（200）。
+
+**原因**：部分中转站（如 g2a.htools.fun 的 Cloudflare/WAF）按 User-Agent 拦截 `OpenAI/Python x.x`（curl、`python-httpx` 等 UA 放行）。AstrBot 的 openai SDK 默认 UA 恰好命中。
+
+**定位**：
+```bash
+curl -X POST {base}/v1/chat/completions -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d '{"model":"...","messages":[{"role":"user","content":"hi"}],"max_tokens":5}' -o /dev/null -w "%{http_code}\n"      # 200 = key 没问题
+curl ... -H "User-Agent: OpenAI/Python 1.80.0" ... -o /dev/null -w "%{http_code}\n"                                          # 403 = UA 被拦
+```
+
+**解决**：给该 provider_sources 条目加 `custom_headers`（AstrBot 会把非空 dict 传给 AsyncOpenAI default_headers，可覆盖 UA）：
+```json
+"custom_headers": { "User-Agent": "python-httpx/0.27.0" }
+```
+改后重启，用 `astrbot-api.py chat` 实测。
+
+**注意**：自家域名/隧道（如 grok.konley.dpdns.org 走 cloudflared）通常无此问题，无需加。
+
 ## 9. 插件源码误入 skill 仓库（禁止）
 
 **现象**：skill 仓库根目录出现未跟踪的 `astrbot_plugin_*` 目录（插件 git 开发副本 / clone）。
